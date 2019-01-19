@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# git clone https://github.com/pairing-with-matt-and-mike/dotfiles.git
+# ./dotfiles/pairing.sh
+# emacs # init spacemacs
+
 # https://aws.amazon.com/ec2/pricing/on-demand/
 # m5.xlarge
 
@@ -17,7 +21,6 @@ add-user liwp
 sudo apt -y update
 sudo apt -y install emacs-nox
 git clone https://github.com/syl20bnr/spacemacs.git .emacs.d
-git clone https://github.com/pairing-with-matt-and-mike/dotfiles.git
 ln -s ~/dotfiles/.spacemacs ~/.spacemacs
 
 touch /tmp/pairing
