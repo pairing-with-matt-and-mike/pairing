@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # git clone https://github.com/pairing-with-matt-and-mike/dotfiles.git
-# ./dotfiles/pairing.sh
+# ./dotfiles/dotfiles/pairing.sh
 # emacs # init spacemacs
 
 # https://aws.amazon.com/ec2/pricing/on-demand/
@@ -21,7 +21,7 @@ add-user liwp
 sudo apt -y update
 sudo apt -y install emacs-nox
 git clone https://github.com/syl20bnr/spacemacs.git .emacs.d
-ln -s ~/dotfiles/.spacemacs ~/.spacemacs
+ln -s ~/dotfiles/dotfiles/.spacemacs ~/.spacemacs
 
 touch /tmp/pairing
 echo "tmux -S /tmp/pairing" > start.sh
