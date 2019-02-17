@@ -1,3 +1,4 @@
+%% https://www.metalevel.at/zurg/
 
 toy_time(buzz,   5).
 toy_time(woody, 10).
