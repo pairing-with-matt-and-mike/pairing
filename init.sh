@@ -2,6 +2,7 @@
 
 # git clone https://github.com/pairing-with-matt-and-mike/pairing.git
 # ./pairing/init.sh
+# ./pairing/nodejs.sh
 # emacs # init spacemacs
 
 # https://aws.amazon.com/ec2/pricing/on-demand/
