@@ -9,3 +9,6 @@ tar -xJf $NODE_TAR
 sudo ln -s $UNTAR_DIR/$NODE_DIR/bin/node /usr/local/bin/node
 sudo ln -s $UNTAR_DIR/$NODE_DIR/bin/npm  /usr/local/bin/npm
 sudo ln -s $UNTAR_DIR/$NODE_DIR/bin/npx  /usr/local/bin/npx
+
+npm install -g prettier
+sudo ln -s $UNTAR_DIR/$NODE_DIR/bin/prettier  /usr/local/bin/prettier
