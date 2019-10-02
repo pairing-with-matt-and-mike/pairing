@@ -1,42 +1,60 @@
 import sys
 from itertools import product
-from datetime import datetime
 from statistics import median
 
 from PIL import Image
 
 histogram_width = 50
-darkness_fuzziness = (3 * 255) * 100
+darkness_fuzziness = 100
 
 def main():
-    image = Image.open(sys.argv[1])
+    filename = sys.argv[1]
+    image = Image.open(filename)
     print(image.format, image.size, image.mode)
     width, height = image.size
-    max_darkness = 3 * 255 * width
+    max_darkness = width
     image_rgb = image.convert("RGB")
     output_image = image_rgb.copy()
 
-    max_seen_darkness = 0
-
+    def is_dark(lightness):
+        if lightness >= 2 * 255:
+            return 0
+        else:
+            return 1
+    
     def get_darkness(y):
-        return sum(
-            (3 * 255) - sum(image_rgb.getpixel((x, y)))
-            for x in range(width)
-        )
+        length = 0
+        longest = 0
+        for x in range(width):
+            if is_dark(sum(image_rgb.getpixel((x, y)))):
+                length += 1
+            else:
+                longest = max(longest, length)
+                length = 0
+
+        return longest
+    
+    darknesses = [get_darkness(y) for y in range(height)]
+
+    max_seen_darkness = max(darknesses)
+
+    def is_stave_line(y):
+        return darknesses[y] >= max_seen_darkness / 2 and \
+            not is_stave_line(y - 1)
     
     for y in range(height):
-        darkness = get_darkness(y)
-        scaled_darkness = int(darkness / max_darkness * histogram_width)
+        scaled_darkness = int(darknesses[y] / max_darkness * histogram_width)
         for hx in range(scaled_darkness):
-            output_image.putpixel((hx, y), (255, 0, 0))
-
-        if darkness > max_seen_darkness:
-            max_seen_darkness = darkness
+            output_image.putpixel(
+                (hx, y),
+                (255, 0, 0) if is_stave_line(y) else (0, 0, 255)
+            )
 
     stave_line_ys = list(filter(
-        lambda y: get_darkness(y) >= max_seen_darkness - darkness_fuzziness,
+        is_stave_line,
         range(height),
     ))
+
     gaps = map(
         lambda y1, y2: y2 - y1,
         stave_line_ys,
@@ -54,7 +72,7 @@ def main():
                 for x in range(-2, 3):
                     output_image.putpixel((78 + x, y), (0, 100, 0))
     
-    output_image.save("output-" + datetime.utcnow().isoformat() + ".png")
+    output_image.save(filename + "-output.png")
 
 
 if __name__ == "__main__":
