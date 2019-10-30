@@ -4,6 +4,7 @@
 # ./pairing/init.sh
 # ./pairing/nodejs.sh
 # emacs # init spacemacs
+# http://elpa.gnu.org/packages/gnu-elpa-keyring-update.html
 
 # https://aws.amazon.com/ec2/pricing/on-demand/
 # m5.xlarge
