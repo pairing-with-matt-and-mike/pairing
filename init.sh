@@ -3,8 +3,9 @@
 # git clone https://github.com/pairing-with-matt-and-mike/pairing.git
 # ./pairing/init.sh
 # ./pairing/nodejs.sh
-# emacs # init spacemacs
 # http://elpa.gnu.org/packages/gnu-elpa-keyring-update.html
+# gpg --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
+# emacs # init spacemacs
 
 # https://aws.amazon.com/ec2/pricing/on-demand/
 # m5.xlarge
