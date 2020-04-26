@@ -3,8 +3,6 @@
 # git clone https://github.com/pairing-with-matt-and-mike/pairing.git
 # ./pairing/init.sh
 # ./pairing/nodejs.sh
-# http://elpa.gnu.org/packages/gnu-elpa-keyring-update.html
-# gpg --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
 # emacs # init spacemacs
 
 # https://aws.amazon.com/ec2/pricing/on-demand/
@@ -33,3 +31,7 @@ echo "tmux -S /tmp/pairing" > start.sh
 chmod +x start.sh
 echo "tmux -S /tmp/pairing attach" > join.sh
 chmod +x join.sh
+
+# http://elpa.gnu.org/packages/gnu-elpa-keyring-update.html
+mkdir -p ~/.emacs.d/elpa/gnupg
+gpg --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
