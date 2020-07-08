@@ -323,4 +323,4 @@ you should place your code here."
   (delete-selection-mode t)
   (spacemacs/toggle-highlight-current-line-globally-off)
   (add-hook 'js2-mode-hook 'prettier-js-mode)
-  )
+  (setq create-lockfiles nil))
