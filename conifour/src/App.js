@@ -1,21 +1,20 @@
 import React, { useEffect, useRef, useState } from "react";
 import "./App.css";
 
-function createPalette(start, end) {
+function interpolatePositions({ start, middle, end }) {
   if (start && end) {
     return [0, 0.2, 0.4, 0.6, 0.8, 1].map((t) =>
-      interpolateColours(start, end, t)
+      interpolatePosition(start, middle, end, t)
     );
   } else {
     return [];
   }
 }
 
-function interpolateColours(start, end, t) {
+function interpolatePosition(start, middle, end, t) {
   return {
-    h: start.h * (1 - t) + end.h * t,
-    s: start.s * (1 - t) + end.s * t,
-    l: start.l * (1 - t) + end.l * t,
+    x: start.x * (1 - t) * (1 - t) + 2 * (1 - t) * t * middle.x + end.x * t * t,
+    y: start.y * (1 - t) * (1 - t) + 2 * (1 - t) * t * middle.y + end.y * t * t,
   };
 }
 
@@ -27,7 +26,12 @@ function App() {
   const width = 200;
   const height = 200;
 
-  const [state, setState] = useState({});
+  const [state, setState] = useState({
+    middle: { x: width / 2, y: height / 2 },
+  });
+
+  const positions = interpolatePositions(state);
+  const colours = positions.map(coordinatesToColour);
 
   function draw(element) {
     const c = element.getContext("2d");
@@ -37,6 +41,32 @@ function App() {
         c.fillRect(x, y, 1, 1);
       }
     }
+
+    c.strokeStyle = "black";
+    for (const position of positions) {
+      drawCross(c, position);
+    }
+  }
+
+  function drawCross(c, centre) {
+    const halfWidth = 3;
+    drawLine(
+      c,
+      { x: centre.x - halfWidth, y: centre.y },
+      { x: centre.x + halfWidth, y: centre.y }
+    );
+    drawLine(
+      c,
+      { x: centre.x, y: centre.y - halfWidth },
+      { x: centre.x, y: centre.y + halfWidth }
+    );
+  }
+
+  function drawLine(c, { x: x1, y: y1 }, { x: x2, y: y2 }) {
+    c.beginPath();
+    c.moveTo(x1, y1);
+    c.lineTo(x2, y2);
+    c.stroke();
   }
 
   function coordinatesToColour({ x, y }) {
@@ -46,14 +76,12 @@ function App() {
   }
 
   function handleMouseDown({ x, y }) {
-    setState((state) => ({ ...state, start: coordinatesToColour({ x, y }) }));
+    setState((state) => ({ ...state, start: { x, y } }));
   }
 
   function handleMouseUp({ x, y }) {
-    setState((state) => ({ ...state, end: coordinatesToColour({ x, y }) }));
+    setState((state) => ({ ...state, end: { x, y } }));
   }
-
-  const colours = createPalette(state.start, state.end);
 
   return (
     <div className="App">
