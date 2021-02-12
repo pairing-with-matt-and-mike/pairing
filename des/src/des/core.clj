@@ -3,8 +3,11 @@
 (defn log [id msg]
   (println (str "[" id "] => " msg)))
 
+(defn gen-id []
+  (Math/abs(.hashCode (java.util.UUID/randomUUID))))
+
 (defn send-msg [registry recipient-id msg]
-  (if-let [mailbox (@registry recipient-id)]
+  (if-let [mailbox (registry recipient-id)]
     (swap! mailbox conj msg)
     (throw (Exception. (str "Node not registered: " recipient-id)))))
 
@@ -17,25 +20,11 @@
 (defn register-node [registry id my-id my-mailbox]
   (send-msg registry id {:op :register :args [my-id my-mailbox]}))
 
-(defn register [registry id & [mailbox]]
-  (swap! registry assoc id mailbox))
-
 (defn deregister-node [registry id my-id]
   (send-msg registry id {:op :deregister :args [my-id]}))
 
-(defn gen-id []
-  (Math/abs(.hashCode (java.util.UUID/randomUUID))))
-
-(defn exec-command [state registry msg]
-  (let [{:keys [op args]} msg]
-    (case op
-      :put (apply assoc state args)
-      :get (let [[k recipient-id] args
-                 v (state k)]
-             (send-msg registry recipient-id {:op :result :args [v]}))
-      :register (let [[id mailbox] args] (register registry id mailbox))
-      :deregister (let [[id] args] (register registry id))
-      (println "ignoring msg:" msg))))
+(defn register [registry id & [mailbox]]
+  (swap! registry assoc id mailbox))
 
 (defn make-task
   ([id f]
@@ -51,11 +40,22 @@
                     (Thread/sleep 500)))
                 (log id "quitting...")
                 (doseq [other-id (keys @registry)]
-                  (deregister-node registry other-id id))
+                  (deregister-node @registry other-id id))
                 (log id "deregistered"))
       :mailbox mailbox
       :go? go?
       :id id})))
+
+(defn exec-command [state registry msg]
+  (let [{:keys [op args]} msg]
+    (case op
+      :put (apply assoc state args)
+      :get (let [[k recipient-id] args
+                 v (state k)]
+             (send-msg @registry recipient-id {:op :result :args [v]}))
+      :register (let [[id mailbox] args] (register registry id mailbox))
+      :deregister (let [[id] args] (register registry id))
+      (println "ignoring msg:" msg))))
 
 (defn make-node
   ([]
@@ -77,16 +77,20 @@
    (make-task id (fn [registry msg] (log id msg)))))
 
 (defn main [args]
-  (let [n (make-node)
-        dn (make-println-node :debug)
-        nodes [n dn]
-        registry (atom (into {} (map #(vector (:id %) (:mailbox %)) nodes)))]
-    (register-node registry (:id n) :debug (:mailbox dn))
-    (put-node registry (:id n) :a 10)
-    (get-node registry (:id n) :a :debug)
+  (let [n1 (make-node)
+        n2 (make-node)
+        debug-mailbox (atom clojure.lang.PersistentQueue/EMPTY)
+        nodes [n1 n2]
+        registry (into {} (map #(vector (:id %) (:mailbox %))) nodes)]
+    (doseq [n nodes]
+      (register-node registry (:id n) :debug debug-mailbox))
+    (put-node registry (:id n1) :a 10)
+    (put-node registry (:id n2) :b 20)
+    (get-node registry (:id n1) :a :debug)
+    (get-node registry (:id n2) :b :debug)
     (doseq [n nodes]
       (stop-node n)
       (wait-node n))
-    (println @registry)
-    ;; cleanup after the futures
-    (shutdown-agents)))
+    (println (seq @debug-mailbox)))
+  ;; clean up after the futures
+  (shutdown-agents))
