@@ -1,4 +1,6 @@
-(ns des.core)
+(ns des.core
+  (:require [clojure.pprint :as pp])
+  (:import [java.util.concurrent LinkedBlockingQueue TimeUnit]))
 
 (defn log [id msg]
   (println (str "[" id "] => " msg)))
@@ -8,8 +10,8 @@
 
 (defn send-msg [registry recipient-id msg]
   (if-let [mailbox (registry recipient-id)]
-    (swap! mailbox conj msg)
-    (throw (Exception. (str "Node not registered: " recipient-id)))))
+    (.offer mailbox msg)
+    (println "Error: Node not registered: " recipient-id (:op msg))))
 
 (defn put-node [registry id key val]
   (send-msg registry id {:op :put :args [key val]}))
@@ -23,74 +25,115 @@
 (defn deregister-node [registry id my-id]
   (send-msg registry id {:op :deregister :args [my-id]}))
 
-(defn register [registry id & [mailbox]]
+(defn ping-node [registry id my-id]
+  (send-msg registry id {:op :ping :args [my-id]}))
+
+(defn pong-node [registry id]
+  (send-msg registry id {:op :pong}))
+
+(defn register [registry id mailbox]
   (swap! registry assoc id mailbox))
 
+(defn deregister [registry id]
+  (swap! registry dissoc id))
+
 (defn make-task
-  ([id f]
-   (let [go? (atom true)
-         mailbox (atom clojure.lang.PersistentQueue/EMPTY)
-         registry (atom {})]
+  ([id init-registry f]
+   (let [mailbox (LinkedBlockingQueue.)
+         registry (atom init-registry)]
+     (doseq [other-id (keys init-registry)]
+       (register-node init-registry other-id id mailbox))
      {:thread (future
                 (log id "starting...")
-                (while (or @go? (peek @mailbox))
-                  (if-let [msg (peek @mailbox)]
-                    (do (swap! mailbox pop)
-                        (f registry msg))
-                    (Thread/sleep 500)))
+                (loop [msg (.poll mailbox 500 TimeUnit/MILLISECONDS)]
+                  (log id (:op msg))
+                  (when (not= :quit (:op msg))
+                    (when msg
+                      (f registry msg))
+                    (recur (.poll mailbox 500 TimeUnit/MILLISECONDS))))
                 (log id "quitting...")
-                (doseq [other-id (keys @registry)]
-                  (deregister-node @registry other-id id))
+                (let [registry* @registry]
+                  (doseq [other-id (keys registry*)]
+                    (deregister-node registry* other-id id)))
                 (log id "deregistered"))
       :mailbox mailbox
-      :go? go?
       :id id})))
 
 (defn exec-command [state registry msg]
   (let [{:keys [op args]} msg]
     (case op
-      :put (apply assoc state args)
+      :put (swap! state #(apply assoc % args))
       :get (let [[k recipient-id] args
-                 v (state k)]
+                 v (@state k)]
              (send-msg @registry recipient-id {:op :result :args [v]}))
       :register (let [[id mailbox] args] (register registry id mailbox))
-      :deregister (let [[id] args] (register registry id))
-      (println "ignoring msg:" msg))))
+      :deregister (let [[id] args] (deregister registry id))
+      :ping (let [[id] args]
+              (pong-node @registry id))
+      :pong nil
+      (println "unknown op:" (:op msg)))))
 
 (defn make-node
-  ([]
-   (make-node (gen-id)))
-  ([id]
+  ([bootstrap-node]
+   (make-node (gen-id) bootstrap-node))
+  ([my-id bootstrap-node]
    (let [state (atom {})]
-     (make-task id (fn [registry msg]
-                     (log id msg)
-                     (swap! state exec-command registry msg))))))
+     (make-task my-id
+                {(:id bootstrap-node) (:mailbox bootstrap-node)}
+                (fn [registry msg]
+                  (exec-command state registry msg))))))
 
-(defn stop-node [node]
-  (-> node :go? (reset! false)))
+(defn make-bootstrap-node
+  ([]
+   (make-bootstrap-node (gen-id)))
+  ([id]
+   (make-task id
+              {}
+              (fn [registry msg]
+                (try 
+                  (let [{:keys [op args]} msg]
+                    (case op
+                      :register (let [[new-id new-mailbox] args
+                                      existing-registry @registry]
+                                  (register registry new-id new-mailbox)
+                                  (doseq [[existing-id existing-mailbox] existing-registry]
+                                    (register-node @registry existing-id new-id new-mailbox)
+                                    (register-node @registry new-id existing-id existing-mailbox)))
+                      :deregister (deregister registry (first args))
+                      (println "unknown op:" (:op msg))))
+                  (catch Exception e
+                    (log id (str "exception" e))
+                    (throw e)))))))
+
+(defn stop-node [registry id]
+  (send-msg registry id {:op :quit}))
 
 (defn wait-node [node]
   (-> node :thread deref))
 
 (defn make-println-node
   ([id]
-   (make-task id (fn [registry msg] (log id msg)))))
+   (make-task id {} (fn [registry msg] (log id msg)))))
 
 (defn main [args]
-  (let [n1 (make-node)
-        n2 (make-node)
-        debug-mailbox (atom clojure.lang.PersistentQueue/EMPTY)
+  (let [bootstrap-node (make-bootstrap-node :bootstrap)
+        n1 (make-node :node-1 bootstrap-node)
+        n2 (make-node :node-2 bootstrap-node)
+        debug-mailbox (LinkedBlockingQueue.)
         nodes [n1 n2]
-        registry (into {} (map #(vector (:id %) (:mailbox %))) nodes)]
-    (doseq [n nodes]
-      (register-node registry (:id n) :debug debug-mailbox))
+        registry (into {}
+                       (map #(vector (:id %) (:mailbox %)))
+                       (conj nodes bootstrap-node))]
+    (register-node registry (:id bootstrap-node) :debug debug-mailbox)
     (put-node registry (:id n1) :a 10)
     (put-node registry (:id n2) :b 20)
+    (Thread/sleep 1000)
     (get-node registry (:id n1) :a :debug)
     (get-node registry (:id n2) :b :debug)
-    (doseq [n nodes]
-      (stop-node n)
+    (ping-node registry (:id n1) :debug)
+    (doseq [n (conj nodes bootstrap-node)]
+      (stop-node registry (:id n))
       (wait-node n))
-    (println (seq @debug-mailbox)))
+    (pp/pprint (seq debug-mailbox)))
   ;; clean up after the futures
   (shutdown-agents))
