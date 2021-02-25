@@ -20,7 +20,7 @@ add-user mwilliamson
 add-user liwp
 
 sudo apt -y update
-sudo apt -y install emacs-nox build-essential imagemagick
+sudo apt -y install emacs-nox build-essential openjdk-8-jdk-headless imagemagick
 git clone https://github.com/syl20bnr/spacemacs.git .emacs.d
 ln -s ~/pairing/dotfiles/.spacemacs ~/.spacemacs
 ln -s ~/pairing/dotfiles/.tmux.conf ~/.tmux.conf
