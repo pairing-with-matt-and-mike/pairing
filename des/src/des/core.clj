@@ -66,7 +66,9 @@
       :get (let [[k recipient-id] args
                  v (@state k)]
              (send-msg @registry recipient-id {:op :result :args [v]}))
-      :register (let [[id mailbox] args] (register registry id mailbox))
+      :register (let [[id mailbox] args]
+                  (register registry id mailbox)
+                  (pong-node @registry id))
       :deregister (let [[id] args] (deregister registry id))
       :ping (let [[id] args]
               (pong-node @registry id))
