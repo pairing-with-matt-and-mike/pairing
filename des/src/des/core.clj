@@ -3,7 +3,7 @@
   (:import [java.util.concurrent LinkedBlockingQueue TimeUnit]))
 
 (defn log [id msg]
-  (println (str "[" id "] => " msg)))
+  (println (str "[" id "] => " (or msg "nil"))))
 
 (defn gen-id []
   (Math/abs(.hashCode (java.util.UUID/randomUUID))))
@@ -21,6 +21,9 @@
 
 (defn register-node [registry id my-id my-mailbox]
   (send-msg registry id {:op :register :args [my-id my-mailbox]}))
+
+(defn register-ack-node [registry id my-id]
+  (send-msg registry id {:op :register-ack :args [my-id]}))
 
 (defn deregister-node [registry id my-id]
   (send-msg registry id {:op :deregister :args [my-id]}))
@@ -59,16 +62,24 @@
       :mailbox mailbox
       :id id})))
 
-(defn exec-command [state registry msg]
+(defn exec-command [my-id state registry msg]
   (let [{:keys [op args]} msg]
     (case op
-      :put (swap! state #(apply assoc % args))
+      :put (let [[k v] args
+                 owner-id (mod (hash k) 2)]
+             (if (= my-id owner-id)
+               (swap! state assoc k v)
+               (send-msg @registry owner-id msg)))
+
       :get (let [[k recipient-id] args
-                 v (@state k)]
-             (send-msg @registry recipient-id {:op :result :args [v]}))
+                 owner-id (mod (hash k) 2)]
+             (if (= my-id owner-id)
+               (send-msg @registry recipient-id {:op :result :args [(@state k)]})
+               (send-msg @registry owner-id msg)))
       :register (let [[id mailbox] args]
                   (register registry id mailbox)
-                  (pong-node @registry id))
+                  (register-ack-node @registry id my-id))
+      :register-ack nil
       :deregister (let [[id] args] (deregister registry id))
       :ping (let [[id] args]
               (pong-node @registry id))
@@ -83,7 +94,7 @@
      (make-task my-id
                 {(:id bootstrap-node) (:mailbox bootstrap-node)}
                 (fn [registry msg]
-                  (exec-command state registry msg))))))
+                  (exec-command my-id state registry msg))))))
 
 (defn make-bootstrap-node
   ([]
