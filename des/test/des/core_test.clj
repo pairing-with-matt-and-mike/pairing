@@ -5,13 +5,14 @@
             LinkedBlockingQueue
             TimeUnit]))
 
-(defn wait-for [mailbox pred]
-  (loop [received []]
-    (if (some pred received)
-      received
-      (if-let [message (.poll mailbox 1 TimeUnit/SECONDS)]
-        (recur (conj received message))
-        (throw (Exception. "No message received"))))))
+(defmacro wait-for [mailbox binding body]
+  `(let [pred# (fn ~binding ~body)]
+     (loop [received# []]
+       (if (some pred# received#)
+         received#
+         (if-let [message# (.poll ~mailbox 1 TimeUnit/SECONDS)]
+           (recur (conj received# message#))
+           (throw (Exception. (str "No message received " '~body))))))))
 
 (defn start-ring [n]
   (let [bootstrap-node (make-bootstrap-node :bootstrap)
@@ -22,7 +23,7 @@
                        (conj nodes bootstrap-node))]
     (register-node registry (:id bootstrap-node) :debug debug-mailbox)
     (doseq [n nodes]
-      (wait-for debug-mailbox (fn [{:keys [op]}] (= op :register-ack))))
+      (wait-for debug-mailbox [{:keys [op]}] (= op :register-ack)))
 
     {:bootstrap-node bootstrap-node
      :debug-mailbox debug-mailbox
@@ -36,7 +37,7 @@
   (let [{:keys [debug-mailbox registry node-ids stop-fn]} (start-ring 2)]
     (ping-node registry (first node-ids) :debug)
     (stop-fn)
-    (wait-for debug-mailbox (fn [{:keys [op]}] (= op :pong)))
+    (wait-for debug-mailbox [{:keys [op]}] (= op :pong))
     (is true)))
 
 (deftest node-consistent-hashing-ish
@@ -44,7 +45,7 @@
     (try
       (put-node registry (first node-ids) :a 1)
       (get-node registry (second node-ids) :a :debug)
-      (wait-for debug-mailbox #(= % {:op :result :args [1]}))
+      (wait-for debug-mailbox [msg] (= msg {:op :result :args [:a 1]}))
       (is true)
       (finally (stop-fn)))))
 
@@ -54,14 +55,14 @@
       (put-node registry (nth node-ids 2) :a 1)
       (Thread/sleep 1000)
       (get-node registry (nth node-ids 0) :a :debug)
-      (wait-for debug-mailbox #(= % {:op :result :args [1]}))
+      (wait-for debug-mailbox [msg] (= msg {:op :result :args [:a 1]}))
       (is true)
       (finally (stop-fn)))))
 
-#_(deftest node-consistent-hashing-get-non-existent-key
-  (let [{:keys [debug-mailbox registry node-ids stop-fn]} (start-ring)]
+(deftest node-consistent-hashing-get-non-existent-key
+  (let [{:keys [debug-mailbox registry node-ids stop-fn]} (start-ring 3)]
     (try
       (get-node registry (second node-ids) :not-there :debug)
-      (wait-for debug-mailbox #(= % {:op :result :args [1]}))
+      (wait-for debug-mailbox [msg] (= msg {:op :result :args [:not-there nil]}))
       (is true)
       (finally (stop-fn)))))

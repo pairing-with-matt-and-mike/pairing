@@ -6,7 +6,7 @@
   (println (str "[" id "] => " (or msg "nil"))))
 
 (defn gen-id []
-  (Math/abs(.hashCode (java.util.UUID/randomUUID))))
+  (Math/abs (hash (java.util.UUID/randomUUID))))
 
 (defn send-msg [registry recipient-id msg]
   (if-let [mailbox (registry recipient-id)]
@@ -74,7 +74,7 @@
       :get (let [[k recipient-id] args
                  owner-id (mod (hash k) 2)]
              (if (= my-id owner-id)
-               (send-msg @registry recipient-id {:op :result :args [(@state k)]})
+               (send-msg @registry recipient-id {:op :result :args [k (@state k)]})
                (send-msg @registry owner-id msg)))
       :register (let [[id mailbox] args]
                   (register registry id mailbox)
