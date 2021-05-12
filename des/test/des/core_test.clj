@@ -9,7 +9,7 @@
   `(let [pred# (fn ~binding ~body)]
      (loop [received# []]
        (if (some pred# received#)
-         received#
+         (last received#)
          (if-let [message# (.poll ~mailbox 1 TimeUnit/SECONDS)]
            (recur (conj received# message#))
            (throw (Exception. (str "No message received " '~body))))))))
@@ -19,9 +19,9 @@
         nodes (map #(make-node % bootstrap-node) (range n))
         debug-mailbox (LinkedBlockingQueue.)
         registry (into {}
-                       (map #(vector (:id %) (:mailbox %)))
+                       (map #(vector (:id %) %))
                        (conj nodes bootstrap-node))]
-    (register-node registry (:id bootstrap-node) :debug debug-mailbox)
+    (register-node registry (:id bootstrap-node) {:id :debug :mailbox debug-mailbox})
     (doseq [n nodes]
       (wait-for debug-mailbox [{:keys [op]}] (= op :register-ack)))
 
@@ -44,9 +44,10 @@
   (let [{:keys [debug-mailbox registry node-ids stop-fn]} (start-ring 2)]
     (try
       (put-node registry (first node-ids) :a 1)
+      (Thread/sleep 1000)
       (get-node registry (second node-ids) :a :debug)
-      (wait-for debug-mailbox [msg] (= msg {:op :result :args [:a 1]}))
-      (is true)
+      (let [result-msg (wait-for debug-mailbox [msg] (= (:op msg) :result))]
+        (is (= result-msg {:op :result :args [:a 1]})))
       (finally (stop-fn)))))
 
 (deftest node-consistent-hashing-get-with-three-nodes
