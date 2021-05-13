@@ -118,7 +118,7 @@
    (make-task id
               {}
               (fn [registry msg]
-                (try 
+                (try
                   (let [{:keys [op args]} msg]
                     (case op
                       :register (let [[arg] args
@@ -142,4 +142,3 @@
 (defn make-println-node
   ([id]
    (make-task id {} (fn [registry msg] (log id msg)))))
-
