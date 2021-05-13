@@ -7,11 +7,11 @@
 
 (defmacro wait-for [mailbox binding body]
   `(let [pred# (fn ~binding ~body)]
-     (loop [received# []]
-       (if (some pred# received#)
-         (last received#)
+     (loop [received# nil]
+       (if (pred# received#)
+         received#
          (if-let [message# (.poll ~mailbox 1 TimeUnit/SECONDS)]
-           (recur (conj received# message#))
+           (recur message#)
            (throw (Exception. (str "No message received " '~body))))))))
 
 (defn start-ring [n]
