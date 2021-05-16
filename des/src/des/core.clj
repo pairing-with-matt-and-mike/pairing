@@ -83,7 +83,7 @@
         h->id (->> storage-node-ids (map (juxt h identity)) (into {}))
         ordered-hashes (sort (keys h->id))
         key-hash (md5 (str (hash k)))
-        target-hash (or (first (drop-while #(< key-hash %) ordered-hashes)) (first ordered-hashes))]
+        target-hash (or (first (drop-while #(> key-hash %) ordered-hashes)) (first ordered-hashes))]
     (h->id target-hash)))
 
 (defn exec-command [my-id state registry msg]
