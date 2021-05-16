@@ -40,29 +40,28 @@
     (wait-for debug-mailbox [{:keys [op]}] (= op :pong))
     (is true)))
 
+(defn send-get-and-await-result [registry debug-mailbox node-id k]
+  (loop []
+    (get-node registry node-id k :debug)
+    (let [result-msg (wait-for debug-mailbox [{:keys [op]}] (= op :result))]
+      (if (= result-msg {:op :result :args [:a nil]})
+        (recur)
+        result-msg))))
+
 (deftest node-consistent-hashing-ish
   (let [{:keys [debug-mailbox registry node-ids stop-fn]} (start-ring 2)]
     (try
       (put-node registry (first node-ids) :a 1)
-      (loop []
-        (get-node registry (second node-ids) :a :debug)
-        (let [result-msg (wait-for debug-mailbox [{:keys [op]}] (= op :result))]
-          (if (= result-msg {:op :result :args [:a nil]})
-            (recur)
-            (is (= result-msg {:op :result :args [:a 1]})))))
+      (is (= (send-get-and-await-result registry debug-mailbox (nth node-ids 0) :a)
+             {:op :result :args [:a 1]}))
       (finally (stop-fn)))))
 
 (deftest node-consistent-hashing-get-with-three-nodes
   (let [{:keys [debug-mailbox registry node-ids stop-fn]} (start-ring 3)]
     (try
       (put-node registry (nth node-ids 2) :a 1)
-      (loop []
-        (get-node registry (nth node-ids 0) :a :debug)
-        (let [result-msg (wait-for debug-mailbox [{:keys [op]}] (= op :result))]
-          (if (= result-msg {:op :result :args [:a nil]})
-            (recur)
-            (is (= result-msg {:op :result :args [:a 1]})))))
-      (is true)
+      (is (= (send-get-and-await-result registry debug-mailbox (nth node-ids 0) :a)
+             {:op :result :args [:a 1]}))
       (finally (stop-fn)))))
 
 (deftest node-consistent-hashing-get-non-existent-key
