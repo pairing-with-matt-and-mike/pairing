@@ -32,6 +32,15 @@
                  (send-quit registry (:id n))
                  (wait-node n))}))
 
+(deftest nodes-reply-to-ping-with-pong
+  (let [{:keys [debug-mailbox registry node-ids stop-fn]} (start-ring 5)
+        _ (doseq [node-id node-ids]
+            (send-ping registry node-id :debug))
+        pongs (repeatedly 5 #(wait-for debug-mailbox [{:keys [op]}] (= op :pong)))]
+    (is (= (set node-ids)
+           (->> pongs (map #(-> % :args first)) set)))
+    (stop-fn)))
+
 (deftest node-replies-to-ping-with-pong
   (let [{:keys [debug-mailbox registry node-ids stop-fn]} (start-ring 2)]
     (send-ping registry (first node-ids) :debug)

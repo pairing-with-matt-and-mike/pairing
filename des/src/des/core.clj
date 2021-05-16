@@ -38,8 +38,8 @@
 (defn send-ping [registry id my-id]
   (send-msg registry id {:op :ping :args [my-id]}))
 
-(defn send-pong [registry id]
-  (send-msg registry id {:op :pong}))
+(defn send-pong [registry id my-id]
+  (send-msg registry id {:op :pong :args [my-id]}))
 
 (defn register [registry arg]
   (swap! registry assoc (:id arg) arg))
@@ -105,7 +105,7 @@
       :register-ack nil
       :deregister (let [[id] args] (deregister registry id))
       :ping (let [[id] args]
-              (send-pong @registry id))
+              (send-pong @registry id my-id))
       :pong nil
       (println "unknown op:" (:op msg)))))
 
