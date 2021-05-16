@@ -20,25 +20,25 @@
     (.offer mailbox msg)
     (println "Error: Node not registered: " recipient-id (:op msg))))
 
-(defn put-node [registry id key val]
+(defn send-put [registry id key val]
   (send-msg registry id {:op :put :args [key val]}))
 
-(defn get-node [registry id k recipient-id]
+(defn send-get [registry id k recipient-id]
   (send-msg registry id {:op :get :args [k recipient-id]}))
 
-(defn register-node [registry id arg]
+(defn send-register [registry id arg]
   (send-msg registry id {:op :register :args [arg]}))
 
-(defn register-ack-node [registry id my-id]
+(defn send-register-ack [registry id my-id]
   (send-msg registry id {:op :register-ack :args [my-id]}))
 
-(defn deregister-node [registry id my-id]
+(defn send-deregister [registry id my-id]
   (send-msg registry id {:op :deregister :args [my-id]}))
 
-(defn ping-node [registry id my-id]
+(defn send-ping [registry id my-id]
   (send-msg registry id {:op :ping :args [my-id]}))
 
-(defn pong-node [registry id]
+(defn send-pong [registry id]
   (send-msg registry id {:op :pong}))
 
 (defn register [registry arg]
@@ -46,6 +46,12 @@
 
 (defn deregister [registry id]
   (swap! registry dissoc id))
+
+(defn send-quit [registry id]
+  (send-msg registry id {:op :quit}))
+
+(defn wait-node [node]
+  (-> node :thread .join))
 
 (defn make-task
   ([id init-registry f]
@@ -62,10 +68,10 @@
                       (log id "quitting...")
                       (let [registry* @registry]
                         (doseq [other-id (keys registry*)]
-                          (deregister-node registry* other-id id)))
+                          (send-deregister registry* other-id id)))
                       (log id "deregistered")))]
      (doseq [other-id (keys init-registry)]
-       (register-node init-registry other-id {:id id :mailbox mailbox :role :storage}))
+       (send-register init-registry other-id {:id id :mailbox mailbox :role :storage}))
      (.start thread)
      {:thread thread
       :mailbox mailbox
@@ -95,11 +101,11 @@
                (send-msg @registry owner-id msg)))
       :register (let [[arg] args]
                   (register registry arg)
-                  (register-ack-node @registry (:id arg) my-id))
+                  (send-register-ack @registry (:id arg) my-id))
       :register-ack nil
       :deregister (let [[id] args] (deregister registry id))
       :ping (let [[id] args]
-              (pong-node @registry id))
+              (send-pong @registry id))
       :pong nil
       (println "unknown op:" (:op msg)))))
 
@@ -127,19 +133,13 @@
                                       existing-registry @registry]
                                   (register registry arg)
                                   (doseq [existing-arg (vals existing-registry)]
-                                    (register-node @registry (:id existing-arg) arg)
-                                    (register-node @registry (:id arg) existing-arg)))
+                                    (send-register @registry (:id existing-arg) arg)
+                                    (send-register @registry (:id arg) existing-arg)))
                       :deregister (deregister registry (first args))
                       (println "unknown op:" (:op msg))))
                   (catch Exception e
                     (log id (str "exception" e))
                     (throw e)))))))
-
-(defn stop-node [registry id]
-  (send-msg registry id {:op :quit}))
-
-(defn wait-node [node]
-  (-> node :thread .join))
 
 (defn make-println-node
   ([id]
