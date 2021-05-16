@@ -50,22 +50,24 @@
 (defn make-task
   ([id init-registry f]
    (let [mailbox (LinkedBlockingQueue.)
-         registry (atom init-registry)]
+         registry (atom init-registry)
+         thread (Thread.
+                 #(do (log id "starting...")
+                      (loop [msg (.poll mailbox 500 TimeUnit/MILLISECONDS)]
+                        (log id (:op msg))
+                        (when (not= :quit (:op msg))
+                          (when msg
+                            (f registry msg))
+                          (recur (.poll mailbox 500 TimeUnit/MILLISECONDS))))
+                      (log id "quitting...")
+                      (let [registry* @registry]
+                        (doseq [other-id (keys registry*)]
+                          (deregister-node registry* other-id id)))
+                      (log id "deregistered")))]
      (doseq [other-id (keys init-registry)]
        (register-node init-registry other-id {:id id :mailbox mailbox :role :storage}))
-     {:thread (future
-                (log id "starting...")
-                (loop [msg (.poll mailbox 500 TimeUnit/MILLISECONDS)]
-                  (log id (:op msg))
-                  (when (not= :quit (:op msg))
-                    (when msg
-                      (f registry msg))
-                    (recur (.poll mailbox 500 TimeUnit/MILLISECONDS))))
-                (log id "quitting...")
-                (let [registry* @registry]
-                  (doseq [other-id (keys registry*)]
-                    (deregister-node registry* other-id id)))
-                (log id "deregistered"))
+     (.start thread)
+     {:thread thread
       :mailbox mailbox
       :id id})))
 
@@ -137,7 +139,7 @@
   (send-msg registry id {:op :quit}))
 
 (defn wait-node [node]
-  (-> node :thread deref))
+  (-> node :thread .join))
 
 (defn make-println-node
   ([id]
