@@ -15,7 +15,7 @@
            (throw (Exception. (str "No message received " '~body))))))))
 
 (defn start-ring [n]
-  (let [bootstrap-node (make-bootstrap-node)
+  (let [bootstrap-node (make-bootstrap-node :bootstrap)
         nodes (repeatedly n #(make-node bootstrap-node))
         debug-mailbox (LinkedBlockingQueue.)
         registry (into {}
