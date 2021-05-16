@@ -1,5 +1,6 @@
 (ns des.core
-  (:require [clojure.pprint :as pp])
+  (:require [clojure.pprint :as pp]
+            [taoensso.timbre :as log])
   (:import [java.util.concurrent LinkedBlockingQueue TimeUnit]
            [java.security MessageDigest]
            [java.math BigInteger]))
@@ -10,7 +11,7 @@
     (BigInteger. 1 raw)))
 
 (defn log [id msg]
-  (println (str "[" id "] => " (or msg "nil"))))
+  (log/info (str "[" id "] => " (or msg "nil"))))
 
 (defn gen-id []
   (Math/abs (hash (java.util.UUID/randomUUID))))
