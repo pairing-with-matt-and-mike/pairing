@@ -60,9 +60,9 @@
          thread (Thread.
                  #(do (log id "starting...")
                       (loop [msg (.poll mailbox 500 TimeUnit/MILLISECONDS)]
-                        (log id (:op msg))
                         (when (not= :quit (:op msg))
                           (when msg
+                            (log id (:op msg))
                             (f registry msg))
                           (recur (.poll mailbox 500 TimeUnit/MILLISECONDS))))
                       (log id "quitting...")
