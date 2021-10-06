@@ -1,12 +1,14 @@
-(ns tcg.core)
+(ns tcg.core
+  (:require [clojure.math.combinatorics :as c]))
 
 (defn new-deck [] (into '() (shuffle [0 0 1 1 2 2 2 3 3 3 3 4 4 4 5 5 6 6 7 8])))
 
 (defn draw [player]
-  (let [card (-> player :deck peek)]
+  (if-let [card (-> player :deck peek)]
     (-> player
         (update :deck pop)
-        (update :hand conj card))))
+        (update :hand conj card))
+    player))
 
 (defn refill-mana [player]
   (let [new-mana (:max-mana player)]
@@ -29,9 +31,12 @@
        :values))
 
 (defn play-card [player mana]
-  (-> player
-      (update :hand #(remove-one #{mana} %))
-      (update :mana - mana)))
+  (cond
+    (> mana (:mana player))             (throw (ex-info "not enough mana" {}))
+    (not (some #{mana} (:hand player))) (throw (ex-info "no matching card" {}))
+    :else                               (-> player
+                                            (update :hand #(remove-one #{mana} %))
+                                            (update :mana - mana))))
 
 (defn deal-damage [player damage]
   (let [new-health (-> player :health (- damage) (max 0))]
@@ -54,14 +59,26 @@
                 :health 10})
       (nth 3)))
 
+(defn choose-cards [player]
+  (->> (:hand player)
+       c/subsets
+       (filter #(<= (apply + %) (:mana player)))
+       (sort-by #(apply + %))
+       last))
+
 (comment
 
   (def s (atom {:attacker (deal)
                 :defender (deal)}))
 
-  (let [card (-> @s :attacker :hand rand-nth)]
+  (do
     (swap! s update :attacker start-turn)
-    (swap! s attack card)
+    (println "==========")
+    (doseq [card (choose-cards (:attacker @s))]
+      (println "card" card)
+      (swap! s attack card))
+    (println "attacker" (:attacker @s))
+    (println "defender" (:defender @s))
     (swap! s finish-turn))
 
   )

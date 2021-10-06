@@ -12,6 +12,11 @@
         result (tcg/draw player)]
     (is (= result {:deck [2] :hand [1]}))))
 
+(deftest test-draw-is-safe-for-empty-deck
+  (let [player {:deck '() :hand [1 2]}
+        result (tcg/draw player)]
+    (is (= result {:deck [] :hand [1 2]}))))
+
 (deftest test-mana-refill
   (let [player {:max-mana 8 :mana 3}
         result (tcg/refill-mana player)]
@@ -32,7 +37,11 @@
     (is (= result {:hand [] :mana 0})))
   (let [player {:hand [2 2] :mana 2}
         result (tcg/play-card player 2)]
-    (is (= result {:hand [2] :mana 0}))))
+    (is (= result {:hand [2] :mana 0})))
+  (let [player {:hand [2 1] :mana 1}]
+    (is (thrown-with-msg? Exception #"^not enough mana$" (tcg/play-card player 2))))
+  (let [player {:hand [] :mana 10}]
+    (is (thrown-with-msg? Exception #"^no matching card$" (tcg/play-card player 2)))))
 
 (deftest test-deal-damage
   (testing "damage < health"
@@ -63,3 +72,9 @@
     (is (= (count (:hand state)) 3))
     (is (= (sort (concat (:hand state) (:deck state)))
            (sort (tcg/new-deck))))))
+
+(deftest test-choose-cards
+  (is (= #{4} (set (tcg/choose-cards {:hand [4] :mana 5}))))
+  (is (= #{5} (set (tcg/choose-cards {:hand [4 5] :mana 5}))))
+  (is (empty? (set (tcg/choose-cards {:hand [6] :mana 5}))))
+  (is (= #{2 3} (set (tcg/choose-cards {:hand [2 3 4] :mana 5})))))
