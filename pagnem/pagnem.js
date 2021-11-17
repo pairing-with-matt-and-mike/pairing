@@ -19,10 +19,18 @@ if (preseed != "random") {
 
 const source = d3.randomLcg(seed);
 const randomInt = d3.randomInt.source(source);
+const randomNormal = d3.randomNormal.source(source);
+
+function randomChoice(options) {
+  let r = randomNormal(0.5, 0.3)();
+  if (r < 0 || r >= 1) {
+    return options[randomInt(0, options.length)()];
+  } else {
+    return options[Math.floor(options.length * r)];
+  }
+}
 
 console.log("seed", seed);
-
-console.log(randomInt(0, 10)());
 
 const width = 100;
 const height = 100;
@@ -30,7 +38,7 @@ const height = 100;
 const padding = 1;
 const squareWidth = 10;
 
-const grid = repeat(() => repeat(() => "room", height), width);
+const grid = repeat(() => repeat(() => ({ type: "room" }), height), width);
 const view = initView();
 
 function onGrid([i, j]) {
@@ -59,14 +67,16 @@ function neighbours(x, y) {
   return results;
 }
 
-function countNeighbours(x, y, type) {
-  return neighbours(x, y).filter(([x, y]) => grid[x][y] === type).length;
+function countAdjacent([x, y], type) {
+  return adjacent(x, y).filter(([x, y]) => grid[x][y].type === type).length;
 }
 
-generate();
+function countNeighbours(x, y, type) {
+  return neighbours(x, y).filter(([x, y]) => grid[x][y].type === type).length;
+}
 
 async function generate() {
-  splitRoomVertically({
+  splitRoom(xAxis, yAxis, {
     minX: 0,
     maxX: width,
     minY: 0,
@@ -75,82 +85,106 @@ async function generate() {
   });
 }
 
-async function splitRoomVertically({ minX, maxX, minY, maxY, depth }) {
-  if (maxX - minX < 3) {
+const xAxis = {
+  max: ({ maxX }) => maxX,
+  min: ({ minX }) => minX,
+
+  set: (grid, x, y, value) => (grid[x][y] = value),
+
+  toXY: (x, y) => [x, y],
+
+  updateArgs: (args, { max, min, depth }) => {
+    args = { ...args };
+    if (max !== undefined) {
+      args.maxX = max;
+    }
+    if (min !== undefined) {
+      args.minX = min;
+    }
+
+    args.depth = depth;
+    return args;
+  },
+};
+
+const yAxis = {
+  max: ({ maxY }) => maxY,
+  min: ({ minY }) => minY,
+
+  set: (grid, y, x, value) => (grid[x][y] = value),
+
+  toXY: (y, x) => [x, y],
+
+  updateArgs: (args, { max, min, depth }) => {
+    args = { ...args };
+    if (max !== undefined) {
+      args.maxY = max;
+    }
+    if (min !== undefined) {
+      args.minY = min;
+    }
+
+    args.depth = depth;
+    return args;
+  },
+};
+
+async function splitRoom(axis1, axis2, args) {
+  // axis1 = y
+  // axis2 = x
+  if (axis1.max(args) - axis1.min(args) < 3) {
     return;
   }
 
+  const { depth } = args;
+
   await sleep(10);
 
-  let wallX = randomInt(minX + 1, maxX - 1)();
-
-  for (let y = minY; y < maxY; y++) {
-    grid[wallX][y] = "wall";
+  const options = [];
+  for (let p = axis1.min(args) + 1; p < axis1.max(args) - 1; p++) {
+    if (
+      countAdjacent(axis2.toXY(axis2.min(args), p), "door") +
+        countAdjacent(axis2.toXY(axis2.max(args) - 1, p), "door") ===
+      0
+    ) {
+      options.push(p);
+    }
   }
 
-  grid[wallX][randomInt(minY, maxY)()] = "door";
+  if (options.length === 0) {
+    return;
+  }
+
+  let wall1 = randomChoice(options);
+
+  for (let p2 = axis2.min(args); p2 < axis2.max(args); p2++) {
+    axis1.set(grid, wall1, p2, { depth, type: "wall" });
+  }
+
+  const door2 = randomInt(axis2.min(args), axis2.max(args))();
+  axis2.set(grid, door2, wall1, { depth, type: "door" });
 
   view.render();
 
   if (depth < 5) {
-    const ap = (
-      0 === randomInt(0, 4)() ? splitRoomVertically : splitRoomHorizontally
-    )({
-      minX,
-      maxX: wallX,
-      minY,
-      maxY,
-      depth: depth + 1,
-    });
-    const bp = (
-      0 === randomInt(0, 4)() ? splitRoomVertically : splitRoomHorizontally
-    )({
-      minX: wallX + 1,
-      maxX,
-      minY,
-      maxY,
-      depth: depth + 1,
-    });
-    await Promise.all([ap, bp]);
-  }
-}
+    const [newAxis1a, newAxis2a] =
+      0 === randomInt(0, 4)() ? [axis1, axis2] : [axis2, axis1];
 
-async function splitRoomHorizontally({ minX, maxX, minY, maxY, depth }) {
-  if (maxY - minY < 3) {
-    return;
-  }
+    const ap = splitRoom(
+      newAxis1a,
+      newAxis2a,
+      axis1.updateArgs(args, { max: wall1, depth: depth + 1 })
+    );
 
-  await sleep(10);
+    const [newAxis1b, newAxis2b] =
+      0 === randomInt(0, 4)() ? [axis1, axis2] : [axis2, axis1];
 
-  let wallY = randomInt(minY + 1, maxY - 1)();
+    const bp = splitRoom(
+      newAxis1b,
+      newAxis2b,
+      axis1.updateArgs(args, { min: wall1 + 1, depth: depth + 1 })
+    );
 
-  for (let x = minX; x < maxX; x++) {
-    grid[x][wallY] = "wall";
-  }
-
-  grid[randomInt(minX, maxX)()][wallY] = "door";
-
-  view.render();
-
-  if (depth < 5) {
-    const ap = (
-      0 === randomInt(0, 4)() ? splitRoomHorizontally : splitRoomVertically
-    )({
-      minX,
-      maxX,
-      minY,
-      maxY: wallY,
-      depth: depth + 1,
-    });
-    const bp = (
-      0 === randomInt(0, 4)() ? splitRoomHorizontally : splitRoomVertically
-    )({
-      minX,
-      maxX,
-      minY: wallY + 1,
-      maxY,
-      depth: depth + 1,
-    });
     await Promise.all([ap, bp]);
   }
 }
@@ -163,7 +197,7 @@ async function generateWalk() {
   let n;
   for (n = 0; n < height; n++) {
     visited.add(x + "_" + y);
-    grid[x][y] = "corridor";
+    grid[x][y].type = "corridor";
     view.render();
     const threshold = randomChoose([2, 2, 2, 2, 3]);
     const possibleNeighbours = adjacent(x, y).filter(
@@ -189,6 +223,8 @@ function sleep(milliseconds) {
   return new Promise((resolve) => setTimeout(() => resolve(), milliseconds));
 }
 
+generate();
+
 view.render();
 
 function initView() {
@@ -205,7 +241,6 @@ function initView() {
         .attr("y", y * squareWidth + padding / 2);
     }
   }
-  //    return view;
 
   function render() {
     for (let x = 0; x < width; x++) {
@@ -218,16 +253,18 @@ function initView() {
   return { render };
 }
 
+const wallColors = d3.interpolateLab("red", "blue");
+
 function squareToColor(square) {
-  switch (square) {
+  switch (square.type) {
     case "room":
       return "grey";
     case "corridor":
       return "red";
     case "door":
-      return "grey";
+      return "green";
     case "wall":
-      return "purple";
+      return wallColors(square.depth / 5);
   }
 }
 
