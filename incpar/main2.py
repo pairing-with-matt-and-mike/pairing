@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+import pytest
 
 class TokenType(enum.Enum):
+    LCURLY=enum.auto()
+    RCURLY=enum.auto()
     LPAREN=enum.auto()
     RPAREN=enum.auto()
+
+class BracketType(enum.Enum):
+    CURLY=enum.auto()
+    PAREN=enum.auto()
 
 @dataclasses.dataclass(frozen=True)
 class Token:
@@ -15,6 +22,10 @@ class Token:
     @staticmethod
     def rparen(*, source):
         return Token(source=source, type=TokenType.RPAREN)
+
+    @staticmethod
+    def rcurly(*, source):
+        return Token(source=source, type=TokenType.RCURLY)
 
 
 def test_can_parse_empty_source():
@@ -30,53 +41,75 @@ def test_can_parse_parens():
         Token(source=")", type=TokenType.RPAREN)
     ]
 
-def test_can_parse_open_paren():
-    source = "("
+@pytest.mark.parametrize("left, right", [
+    ("(", "()"),
+    ("((", "(())"),
+    (")", ""),
+    (")()", "()"),
+    ("(()(", "(()())"),
+    ("{", "{}"),
+    ("{{", "{{}}"),
+    ("}", ""),
+    ("}{}", "{}"),
+    ("{{}{", "{{}{}}"),
+    ("({", "({})"),
+    ("(}", "()"),
+    ("{)", "{}"),
+    ("{(}", "{()}"),
+    ("({)", "({})"),
+    ("))", ""),
+    ("(({)())", "(({})())"),
+    ("({{)())", "({{}})()"),
+])
+def test_enhance_fixes_mismatched_brackets(left, right):
+    assert enhance(tokenise(left)) == enhance(tokenise(right))
+
+def test_can_parse_curly_braces():
+    source = "{}"
     result = enhance(tokenise(source))
     assert result == [
-        Token(source="(", type=TokenType.LPAREN),
-        Token(source=")", type=TokenType.RPAREN)
+        Token(source="{", type=TokenType.LCURLY),
+        Token(source="}", type=TokenType.RCURLY),
     ]
-
-def test_can_parse_double_open_parens():
-    source = "(("
-    result = enhance(tokenise(source))
-    assert result == [
-        Token(source="(", type=TokenType.LPAREN),
-        Token(source="(", type=TokenType.LPAREN),
-        Token(source=")", type=TokenType.RPAREN),
-        Token(source=")", type=TokenType.RPAREN)
-    ]
-
-def test_can_parse_close_paren():
-    source = ")"
-    result = enhance(tokenise(source))
-    assert result == []
-
-def test_can_parse_close_paren_then_open_paren():
-    source = ")("
-    result = enhance(tokenise(source))
-    assert result == [
-        Token(source="(", type=TokenType.LPAREN),
-        Token(source=")", type=TokenType.RPAREN)
-    ]
-
 
 def enhance(tokens):
-    depth = 0
+    stack = []
     result = []
     for token in tokens:
+
+        while ((token.type == TokenType.RPAREN or
+             token.type == TokenType.RCURLY) and
+             len(stack) != 0 and
+             token.type != _token_type_to_closing_token[stack[-1]].type):
+            unclosed_token_type = stack.pop()
+            result.append(_token_type_to_closing_token[unclosed_token_type])
+
         if token.type == TokenType.LPAREN:
-            depth += 1
+            stack.append(BracketType.PAREN)
             result += [token]
-        elif token.type == TokenType.RPAREN and depth != 0:
-            depth -= 1
+        elif (token.type == TokenType.RPAREN and
+              len(stack) != 0 and
+              stack[-1] == BracketType.PAREN):
+            stack.pop()
+            result += [token]
+        elif token.type == TokenType.LCURLY:
+            stack.append(BracketType.CURLY)
+            result += [token]
+        elif (token.type == TokenType.RCURLY and
+              len(stack) != 0 and
+              stack[-1] == BracketType.CURLY):
+            stack.pop()
             result += [token]
 
-    if depth >= 1:
-        return result + [Token.rparen(source=")")] * depth
-    else:
-        return result
+    return result + [
+        _token_type_to_closing_token[token_type]
+        for token_type in reversed(stack)
+    ]
+
+_token_type_to_closing_token = {
+    BracketType.PAREN: Token.rparen(source=")"),
+    BracketType.CURLY: Token.rcurly(source="}"),
+}
 
 
 def tokenise(source):
@@ -90,3 +123,7 @@ def tokenise(source):
         return [Token(c, TokenType.LPAREN), *tokenise(cs)]
     elif c == ")":
         return [Token(c, TokenType.RPAREN), *tokenise(cs)]
+    elif c == "{":
+        return [Token(c, TokenType.LCURLY), *tokenise(cs)]
+    elif c == "}":
+        return [Token(c, TokenType.RCURLY), *tokenise(cs)]
