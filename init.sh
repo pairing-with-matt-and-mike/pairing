@@ -3,6 +3,7 @@
 # git clone https://github.com/pairing-with-matt-and-mike/pairing.git
 # ./pairing/init.sh
 # ./pairing/nodejs.sh
+# ./pairing/clojure.sh
 
 # https://aws.amazon.com/ec2/pricing/on-demand/
 # m5.xlarge
@@ -20,7 +21,7 @@ add-user mwilliamson
 add-user liwp
 
 sudo apt -y update
-sudo apt -y install emacs-nox build-essential openjdk-8-jdk-headless imagemagick
+sudo apt -y install emacs-nox build-essential python3-venv openjdk-8-jdk-headless imagemagick entr
 ln -s ~/pairing/dotfiles/.emacs.d ~/.emacs.d
 ln -s ~/pairing/dotfiles/.tmux.conf ~/.tmux.conf
 
