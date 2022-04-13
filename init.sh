@@ -21,8 +21,7 @@ add-user liwp
 
 sudo apt -y update
 sudo apt -y install emacs-nox build-essential openjdk-8-jdk-headless imagemagick
-git clone https://github.com/syl20bnr/spacemacs.git .emacs.d
-ln -s ~/pairing/dotfiles/.spacemacs ~/.spacemacs
+ln -s ~/pairing/dotfiles/.emacs.d ~/.emacs.d
 ln -s ~/pairing/dotfiles/.tmux.conf ~/.tmux.conf
 
 touch /tmp/pairing
@@ -35,4 +34,4 @@ chmod +x join.sh
 mkdir -p ~/.emacs.d/elpa/gnupg
 gpg --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
 
-emacs --batch -l ~/.emacs.d/init.el --eval="(configuration-layer/update-packages t)"
+# emacs --batch -l ~/.emacs.d/init.el --eval="(configuration-layer/update-packages t)"
