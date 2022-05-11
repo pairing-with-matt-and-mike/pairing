@@ -36,3 +36,6 @@ mkdir -p ~/.emacs.d/elpa/gnupg
 gpg --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
 
 # emacs --batch -l ~/.emacs.d/init.el --eval="(configuration-layer/update-packages t)"
+
+~/pairing/nodejs.sh
+~/pairing/clojure.sh
