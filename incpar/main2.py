@@ -15,6 +15,16 @@ class BracketType(enum.Enum):
     PAREN=enum.auto()
 
 @dataclasses.dataclass(frozen=True)
+class TokensTransition:
+    index: int
+    inserts: List[Token]
+
+    @staticmethod
+    def insert(index, inserts):
+        return TokensTransition(index, inserts)
+
+
+@dataclasses.dataclass(frozen=True)
 class Token:
     source: str
     type: TokenType
@@ -24,53 +34,39 @@ class Token:
         return Token(source=source, type=TokenType.RPAREN)
 
     @staticmethod
+    def lcurly(*, source):
+        return Token(source=source, type=TokenType.LCURLY)
+
+    @staticmethod
     def rcurly(*, source):
         return Token(source=source, type=TokenType.RCURLY)
 
+@dataclasses.dataclass(frozen=True)
+class SourceTransition:
+    index: int
+    character: str
 
-def test_can_parse_empty_source():
-    source = ""
-    result = enhance(tokenise(source))
-    assert result == []
+    @staticmethod
+    def insert(index, character):
+        return SourceTransition(index, character)
 
-def test_can_parse_parens():
-    source = "()"
-    result = enhance(tokenise(source))
-    assert result == [
-        Token(source="(", type=TokenType.LPAREN),
-        Token(source=")", type=TokenType.RPAREN)
-    ]
+@dataclasses.dataclass(frozen=True)
+class State:
+    source: str
+    tokens: List[Token]
 
-@pytest.mark.parametrize("left, right", [
-    ("(", "()"),
-    ("((", "(())"),
-    (")", ""),
-    (")()", "()"),
-    ("(()(", "(()())"),
-    ("{", "{}"),
-    ("{{", "{{}}"),
-    ("}", ""),
-    ("}{}", "{}"),
-    ("{{}{", "{{}{}}"),
-    ("({", "({})"),
-    ("(}", "()"),
-    ("{)", "{}"),
-    ("{(}", "{()}"),
-    ("({)", "({})"),
-    ("))", ""),
-    ("(({)())", "(({})())"),
-    ("({{)())", "({{}})()"),
-])
-def test_enhance_fixes_mismatched_brackets(left, right):
-    assert enhance(tokenise(left)) == enhance(tokenise(right))
+def state_from_source(source):
+    return State(source, enhance(tokenise(source)))
 
-def test_can_parse_curly_braces():
-    source = "{}"
-    result = enhance(tokenise(source))
-    assert result == [
-        Token(source="{", type=TokenType.LCURLY),
-        Token(source="}", type=TokenType.RCURLY),
-    ]
+def generate_tokens_transition(state, source_transition):
+    #new_tokens = tokenise(source_transition.character)
+    if source_transition.character == "{":
+        return [
+            TokensTransition.insert(source_transition.index, Token.lcurly(source="{")),
+            TokensTransition.insert(source_transition.index + 1, Token.rcurly(source="}")),
+        ]
+
+    return []
 
 def enhance(tokens):
     stack = []
@@ -127,3 +123,88 @@ def tokenise(source):
         return [Token(c, TokenType.LCURLY), *tokenise(cs)]
     elif c == "}":
         return [Token(c, TokenType.RCURLY), *tokenise(cs)]
+
+def test_can_parse_empty_source():
+    source = ""
+    result = enhance(tokenise(source))
+    assert result == []
+
+def test_can_parse_parens():
+    source = "()"
+    result = enhance(tokenise(source))
+    assert result == [
+        Token(source="(", type=TokenType.LPAREN),
+        Token(source=")", type=TokenType.RPAREN)
+    ]
+
+@pytest.mark.parametrize("left, right", [
+    ("(", "()"),
+    ("((", "(())"),
+    (")", ""),
+    (")()", "()"),
+    ("(()(", "(()())"),
+    ("{", "{}"),
+    ("{{", "{{}}"),
+    ("}", ""),
+    ("}{}", "{}"),
+    ("{{}{", "{{}{}}"),
+    ("({", "({})"),
+    ("(}", "()"),
+    ("{)", "{}"),
+    ("{(}", "{()}"),
+    ("({)", "({})"),
+    ("))", ""),
+    ("(({)())", "(({})())"),
+    ("({{)())", "({{}})()"),
+])
+def test_enhance_fixes_mismatched_brackets(left, right):
+    assert enhance(tokenise(left)) == enhance(tokenise(right))
+
+def test_can_parse_curly_braces():
+    source = "{}"
+    result = enhance(tokenise(source))
+    assert result == [
+        Token(source="{", type=TokenType.LCURLY),
+        Token(source="}", type=TokenType.RCURLY),
+    ]
+
+@pytest.mark.parametrize("source, source_transition, tokens_transition", [
+    ("{", SourceTransition.insert(1, "}"), []),
+    ("}", SourceTransition.insert(0, "{"), [
+        TokensTransition.insert(0, Token(source="{", type=TokenType.LCURLY)),
+        TokensTransition.insert(1, Token(source="}", type=TokenType.RCURLY)),
+    ]),
+    ("", SourceTransition.insert(0, "{"), [
+        TokensTransition.insert(0, Token(source="{", type=TokenType.LCURLY)),
+        TokensTransition.insert(1, Token(source="}", type=TokenType.RCURLY)),
+    ]),
+    ("()", SourceTransition.insert(2, "{"), [
+        TokensTransition.insert(2, Token(source="{", type=TokenType.LCURLY)),
+        TokensTransition.insert(3, Token(source="}", type=TokenType.RCURLY)),
+    ]),
+    ("()()", SourceTransition.insert(2, "{"), [
+        TokensTransition.insert(2, Token(source="{", type=TokenType.LCURLY)),
+        TokensTransition.insert(3, Token(source="}", type=TokenType.RCURLY)),
+    ]),
+    ("()}", SourceTransition.insert(0, "{"), [
+        TokensTransition.insert(0, Token(source="{", type=TokenType.LCURLY)),
+        TokensTransition.insert(3, Token(source="}", type=TokenType.RCURLY)),
+    ]),
+
+])
+def test_generate_tokens_transition(source, source_transition, tokens_transition):
+    state = state_from_source(source)
+    result = generate_tokens_transition(state, source_transition)
+    assert result == tokens_transition
+
+# def test_generate_tokens_transition():
+#     source = "}"
+#     tokens = enhance(tokenise(source))
+#     source_transition = SourceTransition.insert(0, "{")
+
+#     tokens_transition = generate_tokens_transition(state, source_transition)
+
+#     assert (
+#         enchance(tokenise(apply_source_transition(source, source_transition))) ==
+#         apply_tokens_transition(tokens, tokens_transition)
+#     )
