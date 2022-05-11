@@ -4,3 +4,4 @@ node_modules/
 *~
 __pycache__
 _virtualenv
+/dotfiles/.emacs.d/elpa/

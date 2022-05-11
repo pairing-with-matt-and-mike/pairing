@@ -36,3 +36,7 @@
   (use-package smartparens-config)
   (sp-use-smartparens-bindings)
   (setq sp-highlight-pair-overlay nil))
+
+(use-package magit
+  :ensure t)
+
