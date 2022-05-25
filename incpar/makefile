@@ -6,4 +6,4 @@ bootstrap:
 	_virtualenv/bin/pip install -r requirements.txt
 
 test:
-	ls *.py | entr -- _virtualenv/bin/py.test main2.py
+	ls *.py | entr -- _virtualenv/bin/py.test -v -x main2.py
