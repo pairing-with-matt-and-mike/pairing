@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import dataclasses
 import enum
+
+from hypothesis import given, note, strategies
 import pytest
 
 class TokenType(enum.Enum):
@@ -33,6 +35,33 @@ class TokensTransitionInsert:
 class TokensTransitionChangeOrigin:
     index: int
     new_origin: TokenOrigin
+
+
+def apply_tokens_transitions(tokens, tokens_transition):
+    for transition in tokens_transition:
+        tokens = apply_tokens_transition(tokens, transition)
+
+    return tokens
+
+
+def apply_tokens_transition(tokens, tokens_transition):
+    if isinstance(tokens_transition, TokensTransitionInsert):
+        return (
+            tokens[:tokens_transition.index] +
+            [tokens_transition.token] +
+            tokens[tokens_transition.index:]
+        )
+
+    elif isinstance(tokens_transition, TokensTransitionChangeOrigin):
+        return [
+            dataclasses.replace(token, origin=tokens_transition.new_origin)
+            if index == tokens_transition.index
+            else token
+            for index, token in enumerate(tokens)
+        ]
+
+    else:
+        assert False, "not handled"
 
 
 class TokenOrigin(enum.Enum):
@@ -68,6 +97,14 @@ class SourceTransition:
     def insert(index, character):
         return SourceTransition(index, character)
 
+
+def apply_source_transition(source, source_transition):
+    return (
+        source[:source_transition.index] +
+        source_transition.character +
+        source[source_transition.index:]
+    )
+
 @dataclasses.dataclass(frozen=True)
 class State:
     source: str
@@ -77,18 +114,20 @@ def state_from_source(source):
     return State(source, enhance(tokenise(source)))
 
 def generate_tokens_transition(state, source_transition):
-    #new_tokens = tokenise(source_transition.character)
     if source_transition.character == "{":
-        ignored_token = next(
-            iter(filter(
-                lambda token: token[1].origin == TokenOrigin.IGNORED,
-                enumerate(state.tokens),
-            )),
-            None,
+        ignored_token = _find_or_none(
+            lambda token: (
+                token[1].origin == TokenOrigin.IGNORED and
+                token[1].type == TokenType.RCURLY),
+            enumerate(state.tokens),
         )
-
+# {) => {})
+# (({)})
         if ignored_token is None:
-            closing_token = TokensTransition.insert(source_transition.index + 1, Token.rcurly(source="}"))
+            closing_token = TokensTransition.insert(
+                len(state.tokens) + 1,
+                Token.rcurly(source="}", origin=TokenOrigin.SYNTHETIC)
+            )
         else:
             closing_token = TokensTransition.change_origin(
                 ignored_token[0] + 1,
@@ -100,7 +139,22 @@ def generate_tokens_transition(state, source_transition):
             closing_token,
         ]
 
+    elif source_transition.character == "}":
+        if len(state.tokens) == 0:
+            return [
+                TokensTransition.insert(0, Token.rcurly(source="}", origin=TokenOrigin.IGNORED))
+            ]
+        else:
+            return [
+                TokensTransition.change_origin(1, TokenOrigin.REAL)
+            ]
+
     return []
+
+
+def _find_or_none(predicate, values):
+    return next(iter(filter(predicate, values)), None)
+
 
 def enhance(tokens):
     stack = []
@@ -243,42 +297,72 @@ def test_can_parse_curly_braces():
 
 @pytest.mark.parametrize("source, source_transition, tokens_transition", [
     ("{", SourceTransition.insert(1, "}"), [
-        # TokensTransition.change_origin(1, TokenOrigin.REAL),
+        TokensTransition.change_origin(1, TokenOrigin.REAL),
     ]),
     ("}", SourceTransition.insert(0, "{"), [
-        TokensTransition.insert(0, Token(source="{", type=TokenType.LCURLY)),
+        TokensTransition.insert(0, Token.lcurly(source="{")),
         TokensTransition.change_origin(1, TokenOrigin.REAL),
     ]),
     ("", SourceTransition.insert(0, "{"), [
-        TokensTransition.insert(0, Token(source="{", type=TokenType.LCURLY)),
-        TokensTransition.insert(1, Token(source="}", type=TokenType.RCURLY)),
+        TokensTransition.insert(0, Token.lcurly(source="{")),
+        TokensTransition.insert(1, Token.rcurly(source="}", origin=TokenOrigin.SYNTHETIC)),
+    ]),
+    ("", SourceTransition.insert(0, "}"), [
+        TokensTransition.insert(0, Token.rcurly(source="}", origin=TokenOrigin.IGNORED)),
     ]),
     ("()", SourceTransition.insert(2, "{"), [
-        TokensTransition.insert(2, Token(source="{", type=TokenType.LCURLY)),
-        TokensTransition.insert(3, Token(source="}", type=TokenType.RCURLY)),
+        TokensTransition.insert(2, Token.lcurly(source="{")),
+        TokensTransition.insert(3, Token.rcurly(source="}", origin=TokenOrigin.SYNTHETIC)),
     ]),
     ("()()", SourceTransition.insert(2, "{"), [
-        TokensTransition.insert(2, Token(source="{", type=TokenType.LCURLY)),
-        TokensTransition.insert(3, Token(source="}", type=TokenType.RCURLY)),
+        TokensTransition.insert(2, Token.lcurly(source="{")),
+        TokensTransition.insert(5, Token.rcurly(source="}", origin=TokenOrigin.SYNTHETIC)),
     ]),
     ("()}", SourceTransition.insert(0, "{"), [
-        TokensTransition.insert(0, Token(source="{", type=TokenType.LCURLY)),
+        TokensTransition.insert(0, Token.lcurly(source="{")),
         TokensTransition.change_origin(3, TokenOrigin.REAL),
     ]),
+    ("())", SourceTransition.insert(0, "{"), [
+        TokensTransition.insert(0, Token.lcurly(source="{")),
+        TokensTransition.insert(4, Token.rcurly(source="}", origin=TokenOrigin.SYNTHETIC)),
+    ]),
+    (")", SourceTransition.insert(0, "{"), [
+        TokensTransition.insert(0, Token.lcurly(source="{")),
+        TokensTransition.insert(2, Token.rcurly(source="}", origin=TokenOrigin.SYNTHETIC)),
+    ]),
+    ("()}", SourceTransition.insert(1, "{"), [
+        TokensTransition.insert(1, Token.lcurly(source="{")),
+        TokensTransition.insert(2, Token.rcurly(source="}", origin=TokenOrigin.SYNTHETIC)),
+    ])
 ])
 def test_generate_tokens_transition(source, source_transition, tokens_transition):
     state = state_from_source(source)
     result = generate_tokens_transition(state, source_transition)
     assert result == tokens_transition
 
-# def test_generate_tokens_transition():
-#     source = "}"
-#     tokens = enhance(tokenise(source))
-#     source_transition = SourceTransition.insert(0, "{")
+@given(source=strategies.text(alphabet="{}()"))
+def test_generate_tokens_transition2(source):
+    #  source  ------------ tokenise ------------>  tokens
+    #    |                                             |
+    # apply_source_transition(source_transition) apply_tokens_transition(g(source_trans))
+    #   \|/                                           \|/
+    #  source' ------------ tokenise ------------>  tokens'
+    state = state_from_source(source)
+    source_transition = SourceTransition.insert(0, "{")
+    source2 = apply_source_transition(source, source_transition)
+    note(f"{source2=}")
 
-#     tokens_transition = generate_tokens_transition(state, source_transition)
+    tokens_transition = generate_tokens_transition(state, source_transition)
 
-#     assert (
-#         enchance(tokenise(apply_source_transition(source, source_transition))) ==
-#         apply_tokens_transition(tokens, tokens_transition)
-#     )
+    note(f"{tokens_transition=}")
+
+    tokens_after_source_transition = enhance(tokenise(source2))
+    note(f"{tokens_after_source_transition=}")
+
+    tokens_after_tokens_transition = apply_tokens_transitions(state.tokens, tokens_transition)
+    note(f"{tokens_after_tokens_transition=}")
+
+    assert (
+        tokens_after_source_transition ==
+        tokens_after_tokens_transition
+    )
