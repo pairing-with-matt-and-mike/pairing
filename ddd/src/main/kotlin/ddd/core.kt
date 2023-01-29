@@ -1,4 +1,7 @@
 import kotlin.random.Random
+import kotlinx.collections.immutable.PersistentList;
+import kotlinx.collections.immutable.persistentListOf;
+import kotlinx.collections.immutable.toPersistentList;
 
 enum class Rank(private val short: String) {
     Two("2"),
@@ -45,9 +48,9 @@ object Deck {
     }
 }
 
-data class Shoe(val cards: List<Card>) {
+data class Shoe(val cards: PersistentList<Card>) {
     fun draw(): Pair<Shoe, Card> {
-        val newCards = cards.dropLast(1)
+        val newCards = cards.removeAt(cards.size - 1)
         return Pair(Shoe(newCards), cards.last())
     }
 
@@ -58,41 +61,40 @@ data class Shoe(val cards: List<Card>) {
                 Deck.cards
             }.toMutableList()
             cards.shuffle(random)
-            return Shoe(cards)
+            return Shoe(cards.toPersistentList())
         }
     }
 }
 
-data class Player(val cards: List<Card>) {
+data class Player(val cards: PersistentList<Card>) {
     fun addCard(card: Card): Player {
-        return Player(cards + card)
+        return Player(cards.add(card))
     }
 
     companion object {
         fun emptyHand(): Player {
-            return Player(listOf())
+            return Player(persistentListOf())
         }
     }
 }
 
-data class BlackjackTable(val players: List<Player>, val shoe: Shoe) {
+data class BlackjackTable(val players: PersistentList<Player>, val shoe: Shoe) {
     fun addPlayer(): BlackjackTable {
-        return copy(players = players + Player.emptyHand())
+        return copy(players = players.add(Player.emptyHand()))
     }
 
     fun dealCardToCurrentPlayer(): BlackjackTable {
-        var (newShoe, card) = shoe.draw()
+        val (newShoe, card) = shoe.draw()
 
-        val newPlayers = players.toMutableList()
-        newPlayers[0] = newPlayers[0].addCard(card)
+        val newPlayers = players.set(0, players[0].addCard(card))
 
         return BlackjackTable(newPlayers, newShoe)
     }
 
     fun nextPlayer(): BlackjackTable {
         val player = players.last()
-        val players = players.dropLast(1)
-        return this.copy(players = listOf(player) + players)
+        val players = players.removeAt(players.size - 1)
+        return this.copy(players = persistentListOf(player).addAll(players))
     }
 
     fun startGame(): BlackjackTable {
@@ -104,7 +106,7 @@ data class BlackjackTable(val players: List<Player>, val shoe: Shoe) {
     companion object {
         fun setUp(random: Random): BlackjackTable {
             val shoe = Shoe.decks(8, random)
-            return BlackjackTable(listOf(), shoe)
+            return BlackjackTable(persistentListOf(), shoe)
         }
     }
 }
