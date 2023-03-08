@@ -1,0 +1,1 @@
+mvn fizzed-watcher:run

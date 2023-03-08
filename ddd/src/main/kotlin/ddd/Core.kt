@@ -5,6 +5,7 @@ import kotlinx.collections.immutable.toPersistentList
 
 class NotTheirTurnException(participant: CurrentTurn) : Exception("${participant}")
 
+class DoneException() : Exception("This Game is Done!")
 
 enum class Rank(private val short: String, val score: Int) {
     Two("2", 2),
@@ -133,6 +134,7 @@ data class Dealer(override val hand: Hand): Participant {
 sealed interface CurrentTurn {
     object Dealer: CurrentTurn
     data class Player(val id: Int): CurrentTurn
+    object Done: CurrentTurn
 }
 
 data class Hand(val cards: PersistentList<Card>) {
@@ -141,6 +143,9 @@ data class Hand(val cards: PersistentList<Card>) {
     }
     fun add(card: Card): Hand {
         return Hand(cards.add(card))
+    }
+    fun isBust(): Boolean {
+        return score() > 21
     }
 }
 
@@ -166,6 +171,7 @@ data class BlackjackTable(
                 val newPlayers = players.set(index, players[index].addCard(card))
                 copy(players = newPlayers)
             }
+            is CurrentTurn.Done -> throw DoneException()
         }
 
         return newTable.copy(shoe = newShoe)
@@ -180,6 +186,8 @@ data class BlackjackTable(
                     CurrentTurn.Dealer
 
             CurrentTurn.Dealer -> CurrentTurn.Player(0)
+
+            CurrentTurn.Done -> throw DoneException()
         }
         return copy(currentTurn = nextTurn)
     }
@@ -193,16 +201,34 @@ data class BlackjackTable(
     }
 
     fun playerTwists(id: Int): BlackjackTable {
-        if (currentTurn != CurrentTurn.Player(id)) {
-            // not their turn
-            throw NotTheirTurnException(CurrentTurn.Player(id))
+        assertCurrentTurn(CurrentTurn.Player(id))
+        val table = dealCardToCurrentParticipant()
+        if (table.players[id].hand.isBust()) {
+            return table.playerSticks(id)
+        } else {
+            return table
         }
-
-        return dealCardToCurrentParticipant()
     }
 
     fun playerSticks(id: Int): BlackjackTable {
+        assertCurrentTurn(CurrentTurn.Player(id))
         return nextParticipant()
+    }
+
+    fun dealersTurn(): BlackjackTable {
+        assertCurrentTurn(CurrentTurn.Dealer)
+        if (dealer.hand.score() >= 17) {
+            return copy(currentTurn = CurrentTurn.Done)
+        } else {
+            return dealCardToCurrentParticipant()
+        }
+    }
+
+    fun assertCurrentTurn(turn: CurrentTurn) {
+        if (currentTurn != turn) {
+            // not their turn
+            throw NotTheirTurnException(turn)
+        }
     }
 
     companion object {
@@ -225,12 +251,19 @@ data class BlackjackTable(
 fun main(_args: Array<String>) {
     var table = BlackjackTable.setUp(Random(12345))
     table = table.addPlayer()
-    table = table.addPlayer()
-    table = table.addPlayer()
-    table = table.startGame()
-    table = table.playerTwists(0)
-    //table = table.playerSticks()
-    table = table.playerTwists(2)
+        .addPlayer()
+        .addPlayer()
+        .startGame()
+        .playerTwists(0)
+    // .playerTwists(0)
+    // .playerSticks(0)
+        .playerSticks(1)
+        .playerTwists(2)
+    // .playerSticks(2)
+        .dealersTurn()
+        .dealersTurn()
+        .announceResult()
+        // .dealersTurn()
+
     println("Table: ${table}")
-    println("${table.shoe.cards.size}")
 }
