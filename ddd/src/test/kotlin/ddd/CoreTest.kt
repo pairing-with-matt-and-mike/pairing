@@ -1,4 +1,7 @@
-import kotlin.test.Test
+package ddd
+
+//import kotlin.test.Test
+import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.random.Random
 import kotlinx.collections.immutable.persistentListOf
@@ -18,8 +21,8 @@ class BlackjackTableTests {
                             Card.from("♥T"),
                         ))
         var table = BlackjackTable.setUp(shoe)
-        table = table.addPlayer()
-        table = table.addPlayer()
+        table = table.addPlayer("A")
+        table = table.addPlayer("B")
 
         table = table.startGame()
 
@@ -52,9 +55,15 @@ class BlackjackTableTests {
         assertEquals(13, hand.score())
 
         hand = Hand(persistentListOf(Card.from("♥A"), Card.from("♥5")))
-        assertEquals(6, hand.score())
+        assertEquals(16, hand.score())
 
         hand = Hand(persistentListOf(Card.from("♥9"), Card.from("♥8"), Card.from("♥5")))
         assertEquals(22, hand.score())
+
+        hand = Hand(persistentListOf(Card.from("♥A"), Card.from("♥A"), Card.from("♥A")))
+        assertEquals(13, hand.score())
+
+        hand = Hand(persistentListOf(Card.from("♥A"),Card.from("♥T")))
+        assertEquals(21, hand.score())
     }
 }

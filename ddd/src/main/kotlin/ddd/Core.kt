@@ -1,3 +1,5 @@
+package ddd
+
 import kotlin.random.Random
 import kotlinx.collections.immutable.PersistentList
 import kotlinx.collections.immutable.persistentListOf
@@ -5,6 +7,7 @@ import kotlinx.collections.immutable.toPersistentList
 
 class NotTheirTurnException(participant: CurrentTurn) : Exception("${participant}")
 
+class InitException() : Exception("This Game has not started!")
 class DoneException() : Exception("This Game is Done!")
 
 enum class Rank(private val short: String, val score: Int) {
@@ -107,14 +110,18 @@ sealed interface Participant {
     val hand: Hand
 }
 
-data class Player(override val hand: Hand): Participant {
+data class Player(val id: PlayerId, override val hand: Hand): Participant {
     fun addCard(card: Card): Player {
-        return Player(hand.add(card))
+        return copy(hand = hand.add(card))
+    }
+
+    fun isBust(): Boolean {
+        return hand.isBust()
     }
 
     companion object {
-        fun emptyHand(): Player {
-            return Player(Hand(persistentListOf()))
+        fun emptyHand(id: PlayerId): Player {
+            return Player(id, Hand(persistentListOf()))
         }
     }
 }
@@ -132,14 +139,21 @@ data class Dealer(override val hand: Hand): Participant {
 }
 
 sealed interface CurrentTurn {
+    object Init: CurrentTurn
     object Dealer: CurrentTurn
-    data class Player(val id: Int): CurrentTurn
+    data class Player(val id: PlayerId): CurrentTurn
     object Done: CurrentTurn
 }
 
 data class Hand(val cards: PersistentList<Card>) {
     fun score(): Int {
-        return cards.sumOf { card -> card.score }
+        val hasAce = cards.any { card -> card.rank == Rank.Ace }
+        var score = cards.sumOf { card -> card.score }
+        return if (hasAce && score + 10 <= 21) {
+            score + 10
+        } else {
+            score
+        }
     }
     fun add(card: Card): Hand {
         return Hand(cards.add(card))
@@ -149,25 +163,28 @@ data class Hand(val cards: PersistentList<Card>) {
     }
 }
 
-
 data class BlackjackTable(
     val players: PersistentList<Player>,
     val dealer: Dealer,
     val currentTurn: CurrentTurn,
     val shoe: Shoe,
 ) {
-    fun addPlayer(): BlackjackTable {
-        return copy(players = players.add(Player.emptyHand()))
+    fun addPlayer(id: PlayerId): BlackjackTable {
+        assert(currentTurn == CurrentTurn.Init) {"Game has already started"}
+        return copy(players = players.add(Player.emptyHand(id)))
     }
 
     fun dealCardToCurrentParticipant(): BlackjackTable {
         val (newShoe, card) = shoe.draw()
 
         val newTable = when (currentTurn) {
+            is CurrentTurn.Init -> throw InitException()
             is CurrentTurn.Dealer ->
                 copy(dealer = dealer.addCard(card))
             is CurrentTurn.Player -> {
-                val index = currentTurn.id
+                val index = players.indexOfFirst {
+                    it.id == currentTurn.id
+                }
                 val newPlayers = players.set(index, players[index].addCard(card))
                 copy(players = newPlayers)
             }
@@ -179,13 +196,18 @@ data class BlackjackTable(
 
     fun nextParticipant(): BlackjackTable {
         val nextTurn = when (currentTurn) {
-            is CurrentTurn.Player ->
-                if (currentTurn.id < players.size - 1)
-                    CurrentTurn.Player(currentTurn.id + 1)
+            is CurrentTurn.Init -> throw InitException()
+            is CurrentTurn.Player -> {
+                val currentIdx = players.indexOfFirst {
+                    it.id == currentTurn.id
+                }
+                if (currentIdx < players.size - 1)
+                    CurrentTurn.Player(players[currentIdx + 1].id)
                 else
                     CurrentTurn.Dealer
+            }
 
-            CurrentTurn.Dealer -> CurrentTurn.Player(0)
+            CurrentTurn.Dealer -> CurrentTurn.Player(players[0].id)
 
             CurrentTurn.Done -> throw DoneException()
         }
@@ -195,22 +217,26 @@ data class BlackjackTable(
     fun startGame(): BlackjackTable {
         val participants: PersistentList<Participant> =
             (players as PersistentList<Participant>).add(dealer)
-        return (1..2 * participants.size).fold(this) { acc, _ ->
+        val id = players.first().id
+        return (1..2 * participants.size).fold(copy(currentTurn = CurrentTurn.Player(id))) { acc, _ ->
             acc.dealCardToCurrentParticipant().nextParticipant()
         }
     }
 
-    fun playerTwists(id: Int): BlackjackTable {
+    fun playerTwists(id: PlayerId): BlackjackTable {
         assertCurrentTurn(CurrentTurn.Player(id))
         val table = dealCardToCurrentParticipant()
-        if (table.players[id].hand.isBust()) {
+        val idx = players.indexOfFirst {
+            it.id == id
+        }
+        if (table.players[idx].hand.isBust()) {
             return table.playerSticks(id)
         } else {
             return table
         }
     }
 
-    fun playerSticks(id: Int): BlackjackTable {
+    fun playerSticks(id: PlayerId): BlackjackTable {
         assertCurrentTurn(CurrentTurn.Player(id))
         return nextParticipant()
     }
@@ -231,6 +257,20 @@ data class BlackjackTable(
         }
     }
 
+    fun winningPlayers(): WinningPlayers {
+        return WinningPlayers(
+            players.filter { isWinner(it) }
+                .map { it.id }
+                .toSet()
+        )
+    }
+
+    fun isWinner(player: Player): Boolean {
+        return !player.isBust() &&
+            (dealer.hand.isBust() ||
+                 dealer.hand.score() < player.hand.score())
+    }
+
     companion object {
         fun setUp(random: Random): BlackjackTable {
             val shoe = Shoe.decks(8, random)
@@ -241,29 +281,56 @@ data class BlackjackTable(
             return BlackjackTable(
                 persistentListOf(),
                 Dealer.emptyHand(),
-                CurrentTurn.Player(0),
+                CurrentTurn.Init,
                 shoe,
             )
         }
     }
 }
 
+data class WinningPlayers(val playerIds: Set<PlayerId>)
+
+typealias PlayerId = String
+
 fun main(_args: Array<String>) {
     var table = BlackjackTable.setUp(Random(12345))
-    table = table.addPlayer()
-        .addPlayer()
-        .addPlayer()
+    table = table.addPlayer("Bob")
+        .addPlayer("Luisa")
+        .addPlayer("Will")
         .startGame()
-        .playerTwists(0)
-    // .playerTwists(0)
-    // .playerSticks(0)
-        .playerSticks(1)
-        .playerTwists(2)
-    // .playerSticks(2)
+        .playerTwists("Bob")
+    // .playerTwists("Bob")
+    // .playerSticks("Bob")
+        .playerSticks("Luisa")
+        .playerTwists("Will")
+    // .playerSticks("Will")
         .dealersTurn()
         .dealersTurn()
-        .announceResult()
-        // .dealersTurn()
+    // .announceResult()
+    // .dealersTurn()
 
-    println("Table: ${table}")
+    println("Winning players: ${table.winningPlayers()}")
+
+    println("Table: ${table.copy(shoe = Shoe(persistentListOf()))}")
+
+
+    table = BlackjackTable.setUp(Random(1))
+        .addPlayer("Bob")
+        .startGame()
+    //        .playerTwists("Bob")
+
+    println("Winning players: ${table.winningPlayers()}")
+
+    println("Table: ${table.copy(shoe = Shoe(persistentListOf()))}")
+
+
+    table = BlackjackTable.setUp(Random(2))
+        .addPlayer("Bob")
+        .startGame()
+        .playerTwists("Bob")
+
+    println("Winning players: ${table.winningPlayers()}")
+
+    println("Table: ${table.copy(shoe = Shoe(persistentListOf()))}")
+
 }
