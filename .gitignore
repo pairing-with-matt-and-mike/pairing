@@ -6,3 +6,4 @@ __pycache__
 _virtualenv
 /dotfiles/.emacs.d/elpa/
 .hypothesis/
+/five-by-five/target/
