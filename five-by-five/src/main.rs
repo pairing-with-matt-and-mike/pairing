@@ -8,33 +8,38 @@ use std::collections::{ HashSet };
 
 fn main() {
     let words = read_words().unwrap();
-    let answers = run::<LettersInt>(words);
+    let words: Vec<&str> = words.iter().map(|w| w.as_ref()).collect();
+    let dictionary = make_dictionary(&words);
+    let answers = run::<LettersInt>(&dictionary);
 
     for answer in answers {
         println!("{:?}", answer);
     }
 }
 
-fn run<L: Letters>(
-    all_words: Vec<String>
-) -> Box<dyn Iterator<Item=Vec<String>>> {
-    let dictionary = all_words
-        .into_iter()
+fn make_dictionary<'a>(all_words: &'a [&'a str]) -> Vec<&'a str> {
+    all_words
+        .iter()
         .filter(|w|
                 w.len() == 5 &&
                 HashSet::<char>::from_iter(w.chars()).len() == 5
         )
-        .collect::<Vec<_>>();
-
-    find_answers::<L>(vec![], &dictionary)
+        .map(|w| w.as_ref())
+        .collect::<Vec<&str>>()
 }
 
-fn find_answers<L: Letters>(
-    words: Vec<String>,
-    dictionary: &[String],
-) -> Box<dyn Iterator<Item=Vec<String>>> {
+fn run<'a, L: Letters>(
+    dictionary: &'a[&'a str]
+) -> Box<dyn Iterator<Item=Vec<&'a str>> + 'a> {
+    Box::new(find_answers::<L>(vec![], dictionary))
+}
+
+fn find_answers<'a, 'b, L: Letters>(
+    words: Vec<&'a str>,
+    dictionary: &'b [&'a str],
+) -> Box<dyn Iterator<Item=Vec<&'a str>> + 'a> {
     if words.len() == 5 {
-        Box::from(std::iter::once(words))
+        Box::from(std::iter::once(words.into()))
     } else {
         let ws = find_possible_next_words::<L>(&words, dictionary);
         let ws2: Vec<_> = ws.to_vec();
@@ -42,15 +47,15 @@ fn find_answers<L: Letters>(
             if words.len() == 0 && i % 100 == 0 {
                 println!("{}/{} {}", i, ws2.len(), w);
             }
-            let mut a = words.clone();
-            a.push(w.clone());
+            let mut a: Vec<_> = words.to_vec();
+            a.push(w);
             find_answers::<L>(a, &ws2[i + 1..])
         }))
     }
 }
 
 trait Letters {
-    fn new(words: &[String]) -> Self;
+    fn new(words: &[&str]) -> Self;
     fn contains(&self, letter: char) -> bool;
 }
 
@@ -59,7 +64,7 @@ struct LettersString {
 }
 
 impl Letters for LettersString {
-    fn new(words: &[String]) -> Self {
+    fn new(words: &[&str]) -> Self {
         Self { string: words.join("") }
     }
 
@@ -73,7 +78,7 @@ struct LettersSet {
 }
 
 impl Letters for LettersSet {
-    fn new(words: &[String]) -> Self {
+    fn new(words: &[&str]) -> Self {
         Self { characters: words.iter().flat_map(|w| w.chars()).collect() }
     }
 
@@ -87,7 +92,7 @@ struct LettersInt {
 }
 
 impl Letters for LettersInt {
-    fn new(words: &[String]) -> Self {
+    fn new(words: &[&str]) -> Self {
         let mut cs = 0u32;
         for word in words {
             for c in word.chars() {
@@ -106,10 +111,10 @@ impl Letters for LettersInt {
     }
 }
 
-fn find_possible_next_words<L: Letters>(
-    words: &[String],
-    dictionary: &[String],
-) -> Vec<String> {
+fn find_possible_next_words<'a, L: Letters>(
+    words: &[&'a str],
+    dictionary: &[&'a str],
+) -> Vec<&'a str> {
     let invalid_letters = L::new(words);
     dictionary.iter()
         .filter(|dictionary_word|
@@ -124,14 +129,16 @@ fn read_words() -> Result<Vec<String>, std::io::Error> {
     io::BufReader::new(file).lines().collect()
 }
 
-const TEST_SIZE: usize = 1000;
+const TEST_SIZE: usize = 200;
 
 #[bench]
 fn letter_string(bencher: &mut test::Bencher) {
     bencher.iter(|| {
         let words = read_words().unwrap();
-        let words = words.into_iter().take(TEST_SIZE).collect();
-        let _: Vec<_> = run::<LettersString>(words).collect();
+        let words: Vec<&str> = words.iter().map(|w| w.as_ref()).collect();
+        let words: Vec<&str> = words.into_iter().take(TEST_SIZE).collect();
+        let dictionary = make_dictionary(&words);
+        let _: Vec<_> = run::<LettersString>(&dictionary).collect();
     })
 }
 
@@ -139,8 +146,10 @@ fn letter_string(bencher: &mut test::Bencher) {
 fn letter_set(bencher: &mut test::Bencher) {
     bencher.iter(|| {
         let words = read_words().unwrap();
-        let words = words.into_iter().take(TEST_SIZE).collect();
-        let _: Vec<_> = run::<LettersSet>(words).collect();
+        let words: Vec<&str> = words.iter().map(|w| w.as_ref()).collect();
+        let words: Vec<&str> = words.into_iter().take(TEST_SIZE).collect();
+        let dictionary = make_dictionary(&words);
+        let _: Vec<_> = run::<LettersSet>(&dictionary).collect();
     })
 }
 
@@ -148,7 +157,9 @@ fn letter_set(bencher: &mut test::Bencher) {
 fn letter_int(bencher: &mut test::Bencher) {
     bencher.iter(|| {
         let words = read_words().unwrap();
-        let words = words.into_iter().take(TEST_SIZE).collect();
-        let _: Vec<_> = run::<LettersInt>(words).collect();
+        let words: Vec<&str> = words.iter().map(|w| w.as_ref()).collect();
+        let words: Vec<&str> = words.into_iter().take(TEST_SIZE).collect();
+        let dictionary = make_dictionary(&words);
+        let _: Vec<_> = run::<LettersInt>(&dictionary).collect();
     })
 }
