@@ -1,9 +1,22 @@
+#![feature(test)]
+
+extern crate test;
+
 use std::fs::File;
 use std::io::{ self, BufRead };
 use std::collections::{ HashSet };
 
 fn main() {
-    let dictionary = read_words().unwrap()
+    let words = read_words().unwrap();
+    let answers = run(words);
+
+    for answer in answers {
+        println!("{:?}", answer);
+    }
+}
+
+fn run(all_words: Vec<String>) -> Box<dyn Iterator<Item=Vec<String>>> {
+    let dictionary = all_words
         .into_iter()
         .filter(|w|
                 w.len() == 5 &&
@@ -11,9 +24,7 @@ fn main() {
         )
         .collect::<Vec<_>>();
 
-    for answer in find_answers(vec![], &dictionary) {
-        println!("{:?}", answer);
-    }
+    find_answers(vec![], &dictionary)
 }
 
 fn find_answers(
@@ -50,6 +61,15 @@ fn find_possible_next_words(
 }
 
 fn read_words() -> Result<Vec<String>, std::io::Error> {
-    let file = File::open("words_alpha.txt")?;
+    let file = File::open("wordle-words.txt")?;
     io::BufReader::new(file).lines().collect()
+}
+
+#[bench]
+fn blah(bencher: &mut test::Bencher) {
+    bencher.iter(|| {
+        let words = read_words().unwrap();
+        let words = words.into_iter().take(100).collect();
+        let _: Vec<_> = run(words).collect();
+    })
 }
