@@ -2,7 +2,7 @@ function main(sz) {
 
     console.log(sz);
 
-    const polys = createPolys(sz)
+    const polys = createPolys2(sz)
           .map(poly => serialise(poly).split("\n"));
 
     polys.sort((a, b) => a.length - b.length);
@@ -27,6 +27,10 @@ function main(sz) {
             //console.log(serialise(poly));
         }
     }
+
+    console.log();
+    console.log(`Found ${polys.length}`);
+
 }
 
 function chunked(array, chunkSize) {
@@ -67,6 +71,49 @@ function step(grid, options, r, results) {
 
         grid[x][y] = 0;
     }
+}
+
+function createPolys2(count) {
+    if (count === 1) {
+        return [[[1]]];
+    }
+    const previousPolys = createPolys2(count - 1).map(padPoly);
+
+    const results = new Results();
+
+    for (let previousPoly of previousPolys) {
+        for (let x = 0; x < previousPoly.length; x++) {
+            for (let y = 0; y < previousPoly[x].length; y++) {
+                if (previousPoly[x][y] === 1) {
+                    step(
+                        previousPoly,
+                        [
+                            [x + 1, y],
+                            [x, y + 1],
+                            [x - 1, y],
+                            [x, y - 1],
+                        ],
+                        1,
+                        results
+                    );
+                }
+            }
+        }
+    }
+
+    return results.get();
+}
+
+function padPoly(poly) {
+    const padded = emptyPoly(poly.length + 2);
+
+    for (let x = 0; x < poly.length; x++) {
+        for (let y = 0; y < poly[x].length; y++) {
+            padded[x + 1][y + 1] = poly[x][y];
+        }
+    }
+
+    return padded;
 }
 
 function createPolys(count) {
