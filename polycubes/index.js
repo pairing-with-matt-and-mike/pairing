@@ -1,29 +1,50 @@
-function main() {
-    const polys = createPolys(5);
+function main(sz) {
+
+    console.log(sz);
+
+    const polys = createPolys(sz)
+          .map(poly => serialise(poly).split("\n"));
+
+    polys.sort((a, b) => a.length - b.length);
 
     console.log(`Found ${polys.length}`);
 
-    for (const poly of polys) {
+    for (const chunk of chunked(polys, 6)) {
         console.log();
-        console.log(serialise(poly));
+
+        const polysAsRows = chunk;
+        const maxHeight = Math.max(
+            ...polysAsRows.map(polyAsRows => polyAsRows.length)
+        );
+
+        for (let rowIndex = 0; rowIndex < maxHeight; rowIndex++) {
+            let row = "";
+            for (const polyAsRow of polysAsRows) {
+                row += polyAsRow[rowIndex] || " ".repeat(polyAsRow[0].length);
+                row += "     ";
+            }
+            console.log(row);
+            //console.log(serialise(poly));
+        }
     }
 }
 
-function step(grid, [x,y], r, results) {
-    if (x < 0 || y < 0 || grid[x][y] === 1) return;
-    grid[x][y] = 1;
-    if (r === 1) {
-        results.add(grid);
-     } else {
-         step(grid, [x+1,y], r-1, results);
-         step(grid, [x,y+1], r-1, results);
-         step(grid, [x-1,y], r-1, results);
-         step(grid, [x,y-1], r-1, results);
+function chunked(array, chunkSize) {
+    const result = [];
+    let current;
+
+    for (let i = 0; i < array.length; i++) {
+        if (i % chunkSize === 0) {
+            current = [];
+            result.push(current);
+        }
+        current.push(array[i]);
     }
-    grid[x][y] = 0;
+
+    return result;
 }
 
-function step2(grid, options, r, results) {
+function step(grid, options, r, results) {
     for (var [x, y] of options) {
         if (x < 0 || y < 0 || grid[x][y] === 1) {
             continue;
@@ -41,7 +62,7 @@ function step2(grid, options, r, results) {
                 [x - 1, y],
                 [x, y - 1],
             ];
-            step2(grid, nextOptions, r - 1, results);
+            step(grid, nextOptions, r - 1, results);
         }
 
         grid[x][y] = 0;
@@ -49,10 +70,10 @@ function step2(grid, options, r, results) {
 }
 
 function createPolys(count) {
-    var poly = emptyPoly(count + 1);
+    const start = Math.floor((count - 1) / 4);
+    var poly = emptyPoly(count + start);
     var results = new Results();
-    //    step(poly, [0,0], count, results);
-    step2(poly, [[1, 1]], count, results);
+    step(poly, [[start, start]], count, results);
 
     return results.get();
 }
@@ -129,4 +150,4 @@ function emptyPoly(size) {
     return repeat(() => repeat(() => 0, size), size);
 }
 
-main();
+main(parseInt(process.argv[2]));
