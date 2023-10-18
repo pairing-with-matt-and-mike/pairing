@@ -17,7 +17,7 @@ add-user mwilliamson
 add-user liwp
 
 sudo apt -y update
-sudo apt -y install emacs-nox build-essential python3-venv openjdk-8-jdk-headless imagemagick entr
+sudo apt -y install emacs-nox build-essential python3-venv openjdk-19-jdk-headless imagemagick entr
 ln -s ~/pairing/dotfiles/.emacs.d ~/.emacs.d
 ln -s ~/pairing/dotfiles/.tmux.conf ~/.tmux.conf
 
