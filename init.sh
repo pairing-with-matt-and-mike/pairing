@@ -2,12 +2,8 @@
 
 # git clone https://github.com/pairing-with-matt-and-mike/pairing.git
 # ./pairing/init.sh
-# ./pairing/nodejs.sh
-# ./pairing/clojure.sh
 
 # https://aws.amazon.com/ec2/pricing/on-demand/
-# m5.xlarge
-# m5.large
 
 function add-user {
     GH_USERNAME=$1
