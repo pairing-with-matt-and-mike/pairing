@@ -27,10 +27,6 @@ chmod +x start.sh
 echo "tmux -S /tmp/pairing attach" > join.sh
 chmod +x join.sh
 
-# http://elpa.gnu.org/packages/gnu-elpa-keyring-update.html
-mkdir -p ~/.emacs.d/elpa/gnupg
-gpg --homedir ~/.emacs.d/elpa/gnupg --receive-keys 066DAFCB81E42C40
-
 # emacs --batch -l ~/.emacs.d/init.el --eval="(configuration-layer/update-packages t)"
 
 ~/pairing/nodejs.sh
