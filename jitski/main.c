@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -61,7 +62,7 @@ typedef struct x86_label {
 
 typedef struct x86_call {
   x86_opcode_t opcode;
-  char* label;
+  size_t label;
 } x86_call_t;
 
 x86_inst_t* x86_add(x86_reg_t dest, x86_reg_t src) {
@@ -101,12 +102,14 @@ x86_inst_t* x86_label(char* label) {
   return (x86_inst_t*) inst;
 }
 
-x86_inst_t* x86_call(char* label) {
+x86_inst_t* x86_call(size_t label) {
   x86_call_t* inst = malloc(sizeof(x86_call_t));
   inst->opcode = X86_OPCODE_CALL;
   inst->label = label;
   return (x86_inst_t*) inst;
 }
+
+void* functions[100];
 
 size_t assemble_inst(x86_inst_t* inst, char* output) {
   switch (inst->opcode) {
@@ -116,8 +119,11 @@ size_t assemble_inst(x86_inst_t* inst, char* output) {
     output[1] = (0b11 << 6) | (add->src << 3) | add->dest;
     return 2;
   case X86_OPCODE_CALL:
+    x86_call_t* call = (x86_call_t*) inst;
     output[0] = 0xe8;
-    *((uint32_t*)&output[1]) = 3; // TODO: use real offset
+    ssize_t offset = ((ssize_t)functions[call->label]) - (((ssize_t)output) + 5);
+    assert(offset >= INT32_MIN && offset <= INT32_MAX);
+    *((int32_t*)&output[1]) = offset;
     return 5;
   case X86_OPCODE_LABEL:
     return 0;
@@ -140,7 +146,7 @@ size_t assemble_inst(x86_inst_t* inst, char* output) {
   }
 }
 
-void* assemble(x86_inst_t** instructions, size_t length) {
+void* assemble(x86_inst_t** instructions) {
   int pagesize = getpagesize();
   char* m = mmap(NULL,
                  pagesize,
@@ -150,31 +156,49 @@ void* assemble(x86_inst_t** instructions, size_t length) {
                  0);
 
   size_t output_index = 0;
-  for (size_t i = 0; i < length; i++) {
+  for (size_t i = 0; instructions[i] != NULL; i++) {
     output_index += assemble_inst(instructions[i], &m[output_index]);
   }
 
   return m;
 }
 
+int FUNCTION_G = 0;
+int FUNCTION_F = 1;
+
 int main () {
 
-  x86_inst_t* instructions[] = {
+  x86_inst_t* jit_call_instructions[] = {
+    // jit_call()
+    x86_call(FUNCTION_F),
+    x86_ret(),
+    NULL,
+  };
+
+  x86_inst_t* f_instructions[] = {
     // f(a) { return g() + a; }
     x86_label("f"),
-    x86_call("g"),
+    x86_call(FUNCTION_G),
     x86_add(X86_REG_RAX, X86_REG_RDI),
     x86_ret(),
+    NULL,
+  };
 
+  x86_inst_t* g_instructions[] = {
     // g() { return 10; }
     x86_label("g"),
     x86_mov_imm32(X86_REG_RAX, 10),
     x86_ret(),
+    NULL,
   };
 
-  void* m = assemble(instructions, 7);
+  void* g = assemble(g_instructions);
+  functions[FUNCTION_G] = g;
+  void* f = assemble(f_instructions);
+  functions[FUNCTION_F] = f;
+  void* jit_call = assemble(jit_call_instructions);
 
-  int (*add10)(int) = (int (*)(int))m;
+  int (*add10)(int) = (int (*)(int)) jit_call;
 
   int result = add10(3);
   printf("%d\n", result);
