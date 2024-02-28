@@ -24,8 +24,8 @@ typedef enum x86_opcode {
 typedef enum x86_reg {
   X86_REG_RDI = 0b111, // scratch register
   X86_REG_RSI = 0b110, // scratch register
-  X86_REG_RBP = 0b101,
-  X86_REG_RSP = 0b100,
+  X86_REG_RBP = 0b101, // base pointer / frame pointer
+  X86_REG_RSP = 0b100, // stack pointer
   X86_REG_RBX = 0b011,
   X86_REG_RDX = 0b010, // scratch register
   X86_REG_RCX = 0b001, // scratch register
@@ -79,7 +79,7 @@ typedef struct x86_label {
 
 typedef struct x86_call {
   x86_opcode_t opcode;
-  size_t label;
+  void* ptr;
 } x86_call_t;
 
 typedef struct x86_call_reg {
@@ -145,10 +145,10 @@ x86_inst_t* x86_label(char* label) {
   return (x86_inst_t*) inst;
 }
 
-x86_inst_t* x86_call(size_t label) {
+x86_inst_t* x86_call(void* ptr) {
   x86_call_t* inst = malloc(sizeof(x86_call_t));
   inst->opcode = X86_OPCODE_CALL;
-  inst->label = label;
+  inst->ptr = ptr;
   return (x86_inst_t*) inst;
 }
 
@@ -171,7 +171,7 @@ size_t assemble_inst(x86_inst_t* inst, char* output) {
   case X86_OPCODE_CALL:
     x86_call_t* call = (x86_call_t*) inst;
     output[0] = 0xe8;
-    ssize_t offset = ((ssize_t)functions[call->label]) - (((ssize_t)output) + 5);
+    ssize_t offset = ((ssize_t)call->ptr) - (((ssize_t)output) + 5);
     assert(offset >= INT32_MIN && offset <= INT32_MAX);
     *((int32_t*)&output[1]) = offset;
     return 5;
@@ -247,11 +247,16 @@ int main () {
     NULL,
   };
 
+  void* jit_call = assemble(jit_call_instructions);
+
   x86_inst_t* f_instructions[] = {
     // f(a) { return g() + a; }
     x86_label("f"),
-    x86_call(FUNCTION_G),
-    x86_add(X86_REG_RAX, X86_REG_RDI),
+    x86_mov(X86_REG_RBX, X86_REG_RDI),
+    x86_mov_imm32(X86_REG_RDI, FUNCTION_G),
+    x86_call(jit_call),
+    // x86_call(FUNCTION_G),
+    x86_add(X86_REG_RAX, X86_REG_RBX),
     x86_ret(),
     NULL,
   };
@@ -264,15 +269,17 @@ int main () {
     NULL,
   };
 
+  // TODO:
+  // instructions[FUNCTION_F] = f_instructions;
+  // instructions[FUNCTION_G] = g_instructions;
+
   void* g = assemble(g_instructions);
   functions[FUNCTION_G] = g;
   void* f = assemble(f_instructions);
   functions[FUNCTION_F] = f;
-  void* jit_call = assemble(jit_call_instructions);
 
   uint64_t (*jit)(size_t, uint64_t) = (uint64_t (*)(size_t, uint64_t)) jit_call;
 
-  printf("functions %lu\n", (uint64_t)f);
   uint64_t result = jit(FUNCTION_F, 3);
   printf("%lu\n", result);
 
