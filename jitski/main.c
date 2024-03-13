@@ -19,6 +19,8 @@ typedef enum x86_opcode {
   X86_OPCODE_LABEL,
   X86_OPCODE_CALL,
   X86_OPCODE_CALL_REG,
+  X86_OPCODE_PUSH,
+  X86_OPCODE_POP,
 } x86_opcode_t;
 
 typedef enum x86_reg {
@@ -86,6 +88,16 @@ typedef struct x86_call_reg {
   x86_opcode_t opcode;
   x86_reg_t dest;
 } x86_call_reg_t;
+
+typedef struct x86_push {
+  x86_opcode_t opcode;
+  x86_reg_t src;
+} x86_push_t;
+
+typedef struct x86_pop {
+  x86_opcode_t opcode;
+  x86_reg_t dest;
+} x86_pop_t;
 
 x86_inst_t* x86_add(x86_reg_t dest, x86_reg_t src) {
   x86_add_t* add = malloc(sizeof(x86_add_t));
@@ -159,6 +171,21 @@ x86_inst_t* x86_call_reg(x86_reg_t dest) {
   return (x86_inst_t*) inst;
 }
 
+x86_inst_t* x86_push(x86_reg_t src) {
+  x86_push_t* inst = malloc(sizeof(x86_push_t));
+  inst->opcode = X86_OPCODE_PUSH;
+  inst->src = src;
+  return (x86_inst_t*) inst;
+}
+
+x86_inst_t* x86_pop(x86_reg_t dest) {
+  x86_pop_t* inst = malloc(sizeof(x86_pop_t));
+  inst->opcode = X86_OPCODE_POP;
+  inst->dest = dest;
+  return (x86_inst_t*) inst;
+}
+
+x86_inst_t** function_instructions[100];
 void* functions[100];
 
 size_t assemble_inst(x86_inst_t* inst, char* output) {
@@ -209,6 +236,14 @@ size_t assemble_inst(x86_inst_t* inst, char* output) {
   case X86_OPCODE_RET:
     output[0] = 0xc3;
     return 1;
+  case X86_OPCODE_PUSH:
+    x86_push_t* push = (x86_push_t*) inst;
+    output[0] = 0x50 + push->src;
+    return 1;
+  case X86_OPCODE_POP:
+    x86_pop_t* pop = (x86_pop_t*) inst;
+    output[0] = 0x58 + pop->dest;
+    return 1;
   default:
     return 0;
   }
@@ -231,6 +266,14 @@ void* assemble(x86_inst_t** instructions) {
   return m;
 }
 
+void* jit_function(size_t func_index) {
+  if (functions[func_index] == NULL) {
+    functions[func_index] = assemble(function_instructions[func_index]);
+  }
+
+  return functions[func_index];
+}
+
 size_t FUNCTION_G = 0;
 size_t FUNCTION_F = 1;
 
@@ -238,10 +281,10 @@ int main () {
 
   x86_inst_t* jit_call_instructions[] = {
     // jit_call()
-    x86_mov_imm64(X86_REG_RAX, (uint64_t)functions),
-    // mov rax, [functions + rdi * 8]
-    x86_mov_load(X86_REG_RAX, X86_REG_RAX, X86_REG_RDI, 3), // TODO: constant
-    x86_mov(X86_REG_RDI, X86_REG_RSI),
+    x86_push(X86_REG_RSI), // save argument 1
+    x86_mov_imm64(X86_REG_RAX, (uint64_t) jit_function),
+    x86_call_reg(X86_REG_RAX),
+    x86_pop(X86_REG_RDI), // restore argument 1
     x86_call_reg(X86_REG_RAX),
     x86_ret(),
     NULL,
@@ -253,9 +296,9 @@ int main () {
     // f(a) { return g() + a; }
     x86_label("f"),
     x86_mov(X86_REG_RBX, X86_REG_RDI),
+    // call g()
     x86_mov_imm32(X86_REG_RDI, FUNCTION_G),
     x86_call(jit_call),
-    // x86_call(FUNCTION_G),
     x86_add(X86_REG_RAX, X86_REG_RBX),
     x86_ret(),
     NULL,
@@ -269,14 +312,8 @@ int main () {
     NULL,
   };
 
-  // TODO:
-  // instructions[FUNCTION_F] = f_instructions;
-  // instructions[FUNCTION_G] = g_instructions;
-
-  void* g = assemble(g_instructions);
-  functions[FUNCTION_G] = g;
-  void* f = assemble(f_instructions);
-  functions[FUNCTION_F] = f;
+  function_instructions[FUNCTION_F] = f_instructions;
+  function_instructions[FUNCTION_G] = g_instructions;
 
   uint64_t (*jit)(size_t, uint64_t) = (uint64_t (*)(size_t, uint64_t)) jit_call;
 
